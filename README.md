@@ -131,9 +131,13 @@ python main.py                                # 三种等价启动
 
 ## 五、客户端打包
 
+> `client/local_config.preset.json` **不在仓库中**（已在 `.gitignore` 覆盖 + 从 Git 索引移除），本机需先从 `local_config.example.json` 复制一份并填好真实地址与 Token，再打包；严禁把含真实凭据的 preset 提交或推送到远程。
+
 ```powershell
 cd client
-# 1) 编辑 local_config.preset.json，填好 server_base_url 与 client_token
+# 1) 复制并填写打包预设（仓库不含此文件）：
+copy local_config.example.json local_config.preset.json
+#    编辑 local_config.preset.json，填好 server_base_url 与 client_token
 #    （免引导；否则产物首次运行会弹引导）
 # 2) 打包
 python build.py                                # 等价于双击 build.bat
@@ -148,7 +152,7 @@ python build.py                                # 等价于双击 build.bat
 1. **服务端**：宝塔面板创建 Node 项目（运行用户 www、Node ≥ 18、端口 3000），上传 `server/`、`npm install --omit=dev`、PM2 守护；创建 `homework_time` 库导入 `sql/schema.sql`；写 `.env`（生产必改 `JWT_SECRET`）。
 2. **管理前端**：`cd server/web && npm run build` → 输出 `web/dist/`，由本服务直接静态托管（`app.js` 已配 SPA 兜底），也可走宝塔「网站」+ Nginx 反代 `/api` 与 `/uploads`。
 3. **安全**：登录后台立刻修改 `admin` 密码，并在「客户端 Token」页重置 Token；旧客户端需通过引导或托盘「服务器设置」填入新 Token。
-4. **客户端**：在 `client/local_config.preset.json` 中填好地址与 Token，`python build.py` 出包后整包分发。
+4. **客户端**：先 `copy client/local_config.example.json client/local_config.preset.json`（仓库不含 preset），再填好地址与 Token，`python build.py` 出包后整包分发。
 
 完整步骤、Nginx 反代模板、SSL 与 FAQ 见 [`docs/部署说明.md`](docs/部署说明.md)。
 

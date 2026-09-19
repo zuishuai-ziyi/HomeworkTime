@@ -38,7 +38,7 @@ HomeworkTime/
 │  ├─ main.py                      # 入口（sys.path + UTF-8 stdout）
 │  ├─ build.py / build.bat         # PyInstaller onedir 打包
 │  ├─ local_config.example.json    # 本机配置示例（仅模板）
-│  ├─ local_config.preset.json     # 打包预设（地址/Token，打包前填）
+│  ├─ local_config.preset.json     # 打包预设（不入库；.gitignore；按需从 example 复制并填写）
 │  ├─ requirements.txt
 │  ├─ app/
 │  │  ├─ main.py                   # AppController 启动 + 状态机
@@ -180,7 +180,7 @@ cd client
 python build.py                 # 等价于双击 build.bat
 ```
 
-- 打包前必须先编辑 `client/local_config.preset.json`（填好 `server_base_url` + `client_token`），否则脚本会询问是否仍要继续打包（产物首次启动会弹引导）。
+- 打包前必须先 **从 `client/local_config.example.json` 复制一份** 为 `client/local_config.preset.json`（该文件**不在仓库中**，已在 `.gitignore` 内）并填好 `server_base_url` + `client_token`，否则脚本会询问是否仍要继续打包（产物首次启动会弹引导）。若仓库已无该文件，build.py 会走「未填写确认」分支并给出明确提示，不会崩溃。
 - 产物：`client/dist/HomeworkTime/HomeworkTime.exe`（onedir 单目录，便于拷贝）。
 
 ---
@@ -226,6 +226,7 @@ python build.py                 # 等价于双击 build.bat
 |---|---|---|
 | 服务端环境变量 | `server/.env`（含 `JWT_SECRET`、`DB_PASSWORD`） | 密钥与数据库密码泄露即失守 |
 | 客户端本机配置 | `client/local_config.json`（含 `client_token`） | Token 泄露 = 任何人都能冒充本机心跳 |
+| 客户端打包预设 | `client/local_config.preset.json`（含真实 `server_base_url` + `client_token`） | 该文件已不入库（`.gitignore`），**严禁以任何方式提交或推送到远程**；曾因本地填写真实地址后误提交导致凭据泄露 |
 | 客户端运行产物 | `client/cache/`（含 `business_config.json`、`pending_updates.json`、`sounds/`） | 业务配置版本号缓存；含运行期数据 |
 | 客户端日志 | `client/logs/app_*.log` | 可能包含 URL / Token 片段、心跳异常堆栈 |
 | 音频上传 | `server/uploads/audio/*`（非 `.gitkeep`） | 用户上传内容 |
@@ -234,6 +235,12 @@ python build.py                 # 等价于双击 build.bat
 默认凭据（`admin / admin123`、`CHANGE_ME_DEFAULT_TOKEN`）**仅供演示**，任何非本地初始测试场景都必须先修改。
 
 `.gitignore` 已覆盖以上路径，但 Agent 在写入示例、复制模板时仍须主动避开。
+
+> **`client/local_config.preset.json` 的本机操作约定**：该文件**已从 Git 索引移除且不入库**（`.gitignore` 覆盖）。本机可保留该文件用于本地打包，但**严禁**：
+> - 用 `git add client/local_config.preset.json` / `git add -f ...` 等任何方式把它加入索引；
+> - 把它写进任何文档示例、问题复现片段或 PR 描述；
+> - 通过聊天 / 工单 / 截图 / 日志 透传其真实内容。
+> 新克隆仓库应从 `local_config.example.json` 复制一份作为模板，再在本地按需填写真实地址与 Token；提交任何变更前请用 `git status` + `git diff --cached` 复核，**不得**让该路径出现在索引里。
 
 ---
 
@@ -295,4 +302,5 @@ python build.py                 # 等价于双击 build.bat
 - 提交前必看 `git status` + `git diff`，确认改动范围符合预期。
 - 严禁 `git push --force`、跳过 hooks、提交空 commit、提交包含真实凭据的 commit。
 - 仓库已初始化：主分支 `main` 跟踪 `origin/main`（https://github.com/zuishuai-ziyi/HomeworkTime.git），初始化提交 `2c252f9`。日常按 `git status` → `git diff` → `git add <文件>` → `git commit` → `git push` 流程操作。
-- `client/local_config.preset.json` 虽是入库模板，但 **入库时必须保持 `server_base_url` 为本机开发默认值（`http://127.0.0.1:3000`）、`client_token` 为空字符串**；真实生产地址与 Token 只允许在打包前于本机填写，严禁提交或推送到远程。
+- `client/local_config.preset.json` 历史上由初始化提交（`0bae435`，即在 `2c252f9` 之后）跟踪过一次；现已通过 `git rm --cached` 从索引移除并加入 `.gitignore`。历史提交中残留的安全默认模板（`server_base_url=http://127.0.0.1:3000`、`client_token=""`）不算敏感信息，**不视为凭据泄露**，无需改写历史；若仍存疑可整体 `git filter-repo` 清理并强制同步远端（不在本规范强制范围内）。
+- `client/local_config.preset.json` 已彻底**移出版本控制**（`.gitignore` 覆盖 + 从索引移除），仓库中不再保留任何版本；本地可自行从 `client/local_config.example.json` 复制创建并填写真实生产地址与 Token 用于打包。**严禁以任何方式提交或推送该文件**（详见第六章红线）。

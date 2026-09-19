@@ -11,10 +11,14 @@ client/dist/
 # 敏感配置：服务端 .env 包含 DB 密码与 JWT 密钥，禁止入库
 server/.env
 
+# 客户端本机专属配置 + 打包预设（含 server_base_url / client_token）
+# 打包预设虽仅在打包前填写，但任何状态下都禁止入库，避免真实凭据泄露
+client/local_config.json
+client/local_config.preset.json
+
 # 上传与缓存
 server/uploads/audio/*
 !server/uploads/audio/.gitkeep
-client/local_config.json
 client/cache/
 client/logs/
 
