@@ -1,0 +1,54 @@
+import http from './http'
+
+// ===================== 认证 =====================
+/** POST /api/auth/login { username, password } -> { token, username } */
+export const login = (data) => http.post('/auth/login', data)
+
+// ===================== 配置 =====================
+/** GET /api/config -> { version, config, updated_at, updated_by } */
+export const getConfig = () => http.get('/config')
+/** PUT /api/config body { config } -> { version, config, updated_at, updated_by } */
+export const updateConfig = (config) => http.put('/config', { config })
+
+// ===================== 音频 =====================
+/** GET /api/audio -> { total, items } */
+export const getAudioList = () => http.get('/audio')
+/** POST /api/audio（multipart，字段名 file）仅 .wav */
+export const uploadAudio = (file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  // 大音频上传单独放宽超时（默认 20s 不动），最长 120s
+  return http.post('/audio', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  })
+}
+/** DELETE /api/audio/:id */
+export const deleteAudio = (id) => http.delete(`/audio/${id}`)
+
+// ===================== 用户 =====================
+/** GET /api/users -> { total, items } */
+export const getUsers = () => http.get('/users')
+/** POST /api/users { username, password } -> 201 { id, username } */
+export const createUser = (data) => http.post('/users', data)
+/** PUT /api/users/:id { username?, password? } -> { id, username } */
+export const updateUser = (id, data) => http.put(`/users/${id}`, data)
+/** DELETE /api/users/:id -> { ok } */
+export const deleteUser = (id) => http.delete(`/users/${id}`)
+
+// ===================== 设备 =====================
+/** GET /api/devices -> { total, items }（含 online 判定） */
+export const getDevices = () => http.get('/devices')
+/** PUT /api/devices/:id { room_name } -> { id, room_name } */
+export const updateDeviceRoom = (id, room_name) => http.put(`/devices/${id}`, { room_name })
+
+// ===================== 操作日志 =====================
+/** GET /api/audit-logs?page=&page_size= -> { total, page, page_size, items } */
+export const getAuditLogs = (page, page_size) =>
+  http.get('/audit-logs', { params: { page, page_size } })
+
+// ===================== 客户端 Token =====================
+/** GET /api/client-token -> { token, updated_at } */
+export const getClientToken = () => http.get('/client-token')
+/** POST /api/client-token/reset -> { token } */
+export const resetClientToken = () => http.post('/client-token/reset')

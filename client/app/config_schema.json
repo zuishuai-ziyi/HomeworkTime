@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://homeworktime.local/config.schema.json",
+  "title": "HomeworkTime 业务配置",
+  "description": "晚自习时间段、透明度、提示音等业务配置的唯一契约。客户端模型、服务端校验、后台表单均以本 Schema 为准。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evening_start",
+    "evening_end",
+    "subjects",
+    "opacity",
+    "allow_local_edit",
+    "idle_text",
+    "sound"
+  ],
+  "properties": {
+    "evening_start": {
+      "type": "string",
+      "title": "晚自习开始时间",
+      "description": "HH:MM 24 小时制,例如 18:30。",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "evening_end": {
+      "type": "string",
+      "title": "晚自习结束时间",
+      "description": "HH:MM 24 小时制。当 end <= start 时视为跨天,结束于次日 end。",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "subjects": {
+      "type": "array",
+      "title": "科目时间段",
+      "description": "每天同一套时间段,周一至周日相同;单晚最多 10 个;空档期由区间间隙自动产生。",
+      "minItems": 0,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "start", "end"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "科目名称",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "start": {
+            "type": "string",
+            "title": "开始时间 HH:MM",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "end": {
+            "type": "string",
+            "title": "结束时间 HH:MM",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          }
+        }
+      }
+    },
+    "opacity": {
+      "type": "object",
+      "title": "窗口透明度",
+      "description": "各窗口整体 setWindowOpacity 系数,范围 0.2-1.0;在希沃触摸屏上仍保留点击交互。",
+      "additionalProperties": false,
+      "required": ["main", "ball", "config"],
+      "properties": {
+        "main": {
+          "type": "number",
+          "title": "主窗口透明度",
+          "minimum": 0.2,
+          "maximum": 1.0,
+          "default": 0.85
+        },
+        "ball": {
+          "type": "number",
+          "title": "悬浮球透明度",
+          "minimum": 0.2,
+          "maximum": 1.0,
+          "default": 0.70
+        },
+        "config": {
+          "type": "number",
+          "title": "配置窗口透明度",
+          "minimum": 0.2,
+          "maximum": 1.0,
+          "default": 1.00
+        }
+      }
+    },
+    "allow_local_edit": {
+      "type": "boolean",
+      "title": "是否允许本地修改配置",
+      "description": "false 时客户端隐藏/置灰本地配置入口并提示改用远程后台。",
+      "default": true
+    },
+    "idle_text": {
+      "type": "string",
+      "title": "空档期显示文本",
+      "description": "当前时刻落在晚自习区间内、但不属任何科目段时显示的文字。",
+      "minLength": 1,
+      "maxLength": 64,
+      "default": "课间休息"
+    },
+    "sound": {
+      "type": "object",
+      "title": "提示音",
+      "description": "仅全局一套:临近阈值 + 临近音频 + 结束音频 + 各自开关。",
+      "additionalProperties": false,
+      "required": ["enabled", "near_seconds", "near_audio", "near_enabled", "end_audio", "end_enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "总开关",
+          "description": "false 时临近/结束提示音均不播放。",
+          "default": true
+        },
+        "near_seconds": {
+          "type": "integer",
+          "title": "临近提示音阈值 (秒)",
+          "description": "距离本段结束剩余秒数小于等于该值时,每秒播放一次 near.wav;范围 1-3600。",
+          "minimum": 1,
+          "maximum": 3600,
+          "default": 60
+        },
+        "near_audio": {
+          "type": "string",
+          "title": "临近提示音文件名",
+          "description": "音频文件名,需存在于 audio_files 表;客户端按文件名 + sha256 校验后下载。",
+          "pattern": "^[A-Za-z0-9._-]+\\.wav$",
+          "default": "near.wav"
+        },
+        "near_enabled": {
+          "type": "boolean",
+          "title": "临近提示音开关",
+          "default": true
+        },
+        "end_audio": {
+          "type": "string",
+          "title": "结束提示音文件名",
+          "pattern": "^[A-Za-z0-9._-]+\\.wav$",
+          "default": "end.wav"
+        },
+        "end_enabled": {
+          "type": "boolean",
+          "title": "结束提示音开关",
+          "default": true
+        }
+      }
+    }
+  }
+}

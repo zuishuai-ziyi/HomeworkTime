@@ -1,0 +1,26 @@
+{
+  "_comment": "默认业务配置示例 (晚自习 18:30-22:00)。与 server/sql/schema.sql 中的 config 表初始 content_json 字段保持一致;若调整本文件,请同步 schema.sql 的 INSERT。",
+  "evening_start": "18:30",
+  "evening_end": "22:00",
+  "subjects": [
+    { "name": "语文", "start": "18:30", "end": "19:20" },
+    { "name": "数学", "start": "19:20", "end": "20:10" },
+    { "name": "英语", "start": "20:10", "end": "21:00" },
+    { "name": "物理", "start": "21:00", "end": "22:00" }
+  ],
+  "opacity": {
+    "main": 0.85,
+    "ball": 0.70,
+    "config": 1.00
+  },
+  "allow_local_edit": true,
+  "idle_text": "课间休息",
+  "sound": {
+    "enabled": true,
+    "near_seconds": 60,
+    "near_audio": "near.wav",
+    "near_enabled": true,
+    "end_audio": "end.wav",
+    "end_enabled": true
+  }
+}

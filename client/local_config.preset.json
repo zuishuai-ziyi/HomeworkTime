@@ -1,0 +1,23 @@
+{
+  "_comment": "打包预设：执行打包前请填写真实的 server_base_url 与 client_token，将在目标机器首次运行时生成本机配置。仅本机使用，绝不上传服务器。未填写（保持空）则目标机首启会弹出引导窗口。",
+  "_comment_server_base_url": "服务端 API 的根地址，默认指向本机开发用服务。生产部署时改为宝塔面板上的实际域名或 IP（含协议与端口，不要带尾斜杠）。",
+  "server_base_url": "http://127.0.0.1:3000",
+
+  "_comment_client_token": "客户端鉴权 Token，必须与服务端 client_token 表中保存的 token 一致。首次部署时由后台重置并下发；留空表示尚未配置（目标机首启弹引导）。",
+  "client_token": "",
+
+  "_comment_poll_interval_sec": "配置轮询与心跳的间隔秒数。默认 10 秒，范围建议 5-60；该值越大对服务器压力越小，但配置生效延迟越大。",
+  "poll_interval_sec": 10,
+
+  "_comment_autostart": "是否开机自启（写入 HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run，仅当前用户）。",
+  "autostart": true,
+
+  "_comment_ball_pos": "悬浮球屏幕坐标记忆，{x, y}；首次运行或拖动后由客户端自动持久化。null 表示尚未记忆，使用默认位置（屏幕右下角）。",
+  "ball_pos": null,
+
+  "_comment_ball_size": "悬浮球直径像素，默认 64。建议 32-128；过小不易点击，过大会遮挡希沃一体机屏幕。",
+  "ball_size": 64,
+
+  "_comment_device_uuid": "本机设备 UUID，首次启动时由客户端随机生成并持久化，服务端以此识别教室设备。null 表示尚未生成（首次运行后会替换为真实的 UUID 字符串）。",
+  "device_uuid": null
+}

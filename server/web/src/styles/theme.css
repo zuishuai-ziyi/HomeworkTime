@@ -1,0 +1,36 @@
+/* ============================================================
+ * 清新淡雅蓝色调主题
+ * 色板（深→浅）：
+ *   deep-twilight    #03045E
+ *   french-blue      #023E8A
+ *   bright-teal-blue #0077B6  ← 主操作色
+ *   blue-green       #0096C7
+ *   turquoise-surf   #00B4D8
+ *   sky-aqua         #48CAE4
+ *   frosted-blue     #90E0EF
+ *   frosted-blue-2   #ADE8F4
+ *   light-cyan       #CAF0F8
+ * ============================================================ */
+
+:root {
+  --deep-twilight:    #03045EFF;
+  --french-blue:      #023E8AFF;
+  --bright-teal-blue: #0077B6FF;
+  --blue-green:       #0096C7FF;
+  --turquoise-surf:   #00B4D8FF;
+  --sky-aqua:         #48CAE4FF;
+  --frosted-blue:     #90E0EFFF;
+  --frosted-blue-2:   #ADE8F4FF;
+  --light-cyan:       #CAF0F8FF;
+}
+
+/* Element Plus 主色：清新蓝 */
+:root {
+  --el-color-primary:           #0077B6;
+  --el-color-primary-light-3:   #3392C4;
+  --el-color-primary-light-5:   #80BBDB;
+  --el-color-primary-light-7:   #B3D5EA;
+  --el-color-primary-light-8:   #CCE3F4;
+  --el-color-primary-light-9:   #E6F1F9;
+  --el-color-primary-dark-2:    #005F92;
+}
