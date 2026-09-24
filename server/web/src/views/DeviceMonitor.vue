@@ -34,6 +34,14 @@
       <el-table-column prop="client_version" label="客户端版本" min-width="120">
         <template #default="{ row }">{{ row.client_version || '—' }}</template>
       </el-table-column>
+      <el-table-column prop="update_pending_version" label="待更新" min-width="110" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.update_pending_version" type="warning" size="small">
+            {{ row.update_pending_version }}
+          </el-tag>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="last_heartbeat" label="最后心跳" min-width="170">
         <template #default="{ row }">{{ row.last_heartbeat || '—' }}</template>
       </el-table-column>
@@ -201,5 +209,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.muted {
+  color: #c0c4cc;
 }
 </style>

@@ -107,7 +107,7 @@
 ### 3.2 `POST /api/client/heartbeat`
 
 - 鉴权：`X-Client-Token`
-- 描述：上报本机心跳；服务端按 `device_uuid` upsert 设备记录，并返回当前 `config.version`，客户端据此决定是否拉取。
+- 描述：上报本机心跳；服务端按 `device_uuid` upsert 设备记录，并返回当前 `config.version` 与已发布的全量更新包信息（客户端据此下载并在生效时间到点后替换重启，支持管理端与学校端不同时在线的延迟更新）。
 
 请求体：
 
@@ -115,8 +115,9 @@
 {
   "device_uuid":    "1f2c4b8a-...",
   "device_name":    "SEEWO-A01",
-  "client_version": "1.0.0",
-  "config_version": 6
+  "client_version": "1.1.0",
+  "config_version": 6,
+  "update_pending_version": "1.2.0"
 }
 ```
 
@@ -126,20 +127,38 @@
 |---|---|---|---|
 | `device_uuid` | string | 是 | 客户端首次启动生成的 UUID，作为设备唯一标识 |
 | `device_name` | string | 否 | 主机名（客户端默认用 `platform.node()`） |
-| `client_version` | string | 否 | 客户端版本号（当前 `1.0.0`） |
+| `client_version` | string | 否 | 客户端版本号（见 `client/app/version.py`） |
 | `config_version` | integer \| null | 否 | 该客户端最近一次成功拉取的配置版本 |
+| `update_pending_version` | string \| null | 否 | 客户端已下载待生效的更新版本（后台设备监控展示用；NULL=无） |
 
 成功响应 `200`：
 
 ```json
-{ "version": 7 }
+{
+  "version": 7,
+  "update": {
+    "version": "1.2.0",
+    "size": 81510400,
+    "sha256": "3f2a...",
+    "effective_time": "2026-09-26 08:00:00"
+  }
+}
 ```
+
+`update` 字段说明（未发布过更新包时为 `null`）：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `version` | string | 版本号（应与包内 update_manifest.json 一致） |
+| `size` | number | zip 字节数（下载后校验） |
+| `sha256` | string | zip 十六进制 sha256（下载后校验） |
+| `effective_time` | string | 生效时间 `YYYY-MM-DD HH:MM:SS`；客户端到点后替换重启，若正处晚自习则顺延至晚自习结束 |
 
 错误响应：`400 device_uuid 不能为空`。
 
 服务端行为：
 - `last_heartbeat = NOW()`，`ip = req.ip`；
-- 返回当前 `config` 表单行（id=1）的 `version`。
+- 返回当前 `config` 表单行（id=1）的 `version` 与 `client_update` 表单行（id=1）的对外信息（不含 `stored_path`）。
 
 ### 3.3 `GET /api/client/audio`
 
@@ -186,6 +205,16 @@
 - `404 音频文件不存在`（DB 记录存在但物理文件丢失 / ENOENT）。
 
 > `near.wav` / `end.wav` 内置行 `stored_path` 为 NULL，因此**不能**通过本接口下载——客户端内置资源来自 `client/resources/sounds/`；只有当管理员上传同名覆盖版后，本接口才能下到文件。
+
+### 3.5 `GET /api/client/update/download`
+
+- 鉴权：`X-Client-Token`
+- 描述：下载当前已发布的全量更新包 zip 二进制流（客户端 Updater 后台线程流式下载，不占用心跳会话锁）。包由 `client/build.py` 自动产出：根级为 `HomeworkTime.exe`、`_internal/` 等应用文件 + `update_manifest.json` 版本清单。
+- 响应头：`X-Update-Sha256`（sha256）、`X-Update-Size`（字节数）、`Content-Type: application/zip`，供客户端核对。
+
+错误响应：
+- `404 暂无已发布的更新包`（`client_update` 表无记录）；
+- `404 更新包文件不存在`（DB 记录存在但物理文件丢失 / ENOENT）。
 
 ---
 
@@ -610,6 +639,60 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 { "ok": true, "time": "2026-09-18T13:00:00.000Z" }
 ```
 
+### 4.17 `POST /api/updates/upload`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：上传全量更新包 zip 并**立即发布**（全量推送；单行表 `client_update` 仅保留最新一个包，旧包物理文件随后删除；回滚 = 重新上传旧包）。写审计日志 `update.upload`。
+- 请求格式：`multipart/form-data`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `file` | file | 是 | `.zip` 更新包，上限 500MB |
+| `version` | string | 否 | 版本号（`^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$`）；缺省时从文件名 `HomeworkTime_<版本>.zip` 提取 |
+| `notes` | string | 否 | 更新说明，≤ 500 字符 |
+| `effective_time` | string | 否 | 生效时间 `YYYY-MM-DD HH:mm[:ss]`；**为空 = 立即生效**。客户端到点后替换重启，正处晚自习则顺延 |
+
+成功响应 `200`：
+
+```json
+{
+  "item": {
+    "id": 1,
+    "version": "1.2.0",
+    "notes": "修复悬浮球拖拽越界",
+    "size": 81510400,
+    "sha256": "3f2a...",
+    "effective_time": "2026-09-26 08:00:00",
+    "published_at": "2026-09-25 16:00:00",
+    "uploaded_by": "admin"
+  }
+}
+```
+
+错误响应：`400` 版本号非法 / 生效时间格式非法 / 缺少上传文件 / 仅允许上传 .zip 更新包；`413` 更新包超过 500MB 上传上限。
+
+### 4.18 `GET /api/updates/current`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：查询当前已发布的更新包信息（不含 `stored_path`）；未发布过则 `{"item": null}`。
+
+成功响应 `200`：同 4.17 的 `item` 结构。
+
+### 4.19 `PUT /api/updates/current/effective-time`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：修改当前版本的生效时间（发布后调整客户端到点时刻；客户端下一次心跳即感知）。写审计日志 `update.effective_time`。
+
+请求体：
+
+```json
+{ "effective_time": "2026-09-27 08:00:00" }
+```
+
+成功响应 `200`：`{ "ok": true, "effective_time": "2026-09-27 08:00:00" }`
+
+错误响应：`400` 生效时间格式非法；`404 尚未发布过更新包`。
+
 ---
 
 ## 五、常见错误场景对照
@@ -626,6 +709,10 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 | 改自己密码 / 删自己 | 400 | `不能删除自己（当前登录账号）` |
 | 删最后一个用户 | 400 | `不能删除最后一个用户` |
 | 上传非 .wav 文件 | 400 | `仅允许上传 .wav 文件` |
+| 上传非 .zip 更新包 | 400 | `仅允许上传 .zip 更新包` |
+| 更新包超过 500MB | 400 | `更新包超过 500MB 上传上限` |
+| 更新包版本号非法 | 400 | `版本号非法（字母数字开头，可含 . + -，长度 1-32）…` |
+| 修改生效时间但未发布过更新包 | 404 | `尚未发布过更新包` |
 | 删除内置音频 | 400 | `内置音频不可删除` |
 | 配置 PUT 字段缺失 / 非法 | 400 | `配置校验失败`（附 `errors[]`） |
 | 配置行 id=1 不存在 | 404 | `配置不存在（请先执行 schema.sql 或让 seed 初始化）` |

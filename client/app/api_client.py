@@ -34,11 +34,12 @@ from .config import (
     load_pending,
     resource_path,
 )
+from .version import APP_VERSION
 
 logger = logging.getLogger(__name__)
 
-#: 客户端版本号（心跳上报）
-CLIENT_VERSION = "1.0.0"
+#: 客户端版本号（心跳上报；单一来源 app/version.py）
+CLIENT_VERSION = APP_VERSION
 #: 内置音频文件名（打包资源优先；仅当服务端 sha 与本地不一致时才下载覆盖版）
 BUILTIN_AUDIO_NAMES = ("near.wav", "end.wav")
 
@@ -129,6 +130,12 @@ class ApiClient:
         #: 网络调用互斥锁（音频保障线程与主线程 tick 可能并发访问 session）
         self._net_lock = threading.RLock()
         self._version = self._load_local_version()
+        #: 最近一次心跳下发的全量更新信息（无则 None）；
+        #: {version, size, sha256, effective_time}，由 Updater 消费
+        self.server_update: Optional[Dict[str, Any]] = None
+        #: 心跳上报的「已下载待生效版本」（由 AppController 每次心跳前
+        #: 从 Updater.pending_version() 刷新；None=无待生效更新）
+        self.pending_update_version: Optional[str] = None
 
     # ------------------------------------------------------------------
     # 凭据热更新
@@ -260,7 +267,9 @@ class ApiClient:
         return True
 
     def heartbeat(self) -> bool:
-        """上报心跳；响应 version 高于本地时自动触发 poll()。
+        """上报心跳；响应 version 高于本地时自动触发 poll()；
+        响应 update 字段（服务端已发布的全量更新包信息）存入
+        self.server_update，由 AppController 交给 Updater 处理。
 
         返回本次心跳是否成功（网络通且鉴权通过）。
         """
@@ -269,6 +278,7 @@ class ApiClient:
             "device_name": platform.node() or "",
             "client_version": CLIENT_VERSION,
             "config_version": self._version,
+            "update_pending_version": self.pending_update_version,
         }
         data = self._request_json("POST", "/api/client/heartbeat", json=body)
         if not isinstance(data, dict):
@@ -280,6 +290,50 @@ class ApiClient:
             server_version = 0
         if server_version > self._version:
             self.poll()
+        update = data.get("update")
+        self.server_update = update if isinstance(update, dict) else None
+        return True
+
+    def download_update(self, url_path: str, dest_path: str) -> bool:
+        """流式下载全量更新包到 dest_path（Updater 后台线程调用）。
+
+        - 不走 ``_net_lock``、不复用 session：大文件下载耗时可达分钟级，
+          不能阻塞心跳/轮询/音频保障；
+        - 连接超时 10s、读超时 60s（流式期间每块读取都受限）；
+        - 只负责落盘，sha256/大小校验由 Updater 完成；
+        - 网络异常/HTTP 错误返回 False 且不抛出。
+        """
+        if not self.base_url or not self.token:
+            return False
+        url = "{}{}".format(self.base_url, url_path)
+        try:
+            resp = requests.get(
+                url,
+                headers={_AUTH_HEADER: self.token},
+                stream=True,
+                timeout=(10, 60),
+            )
+        except requests.exceptions.RequestException as exc:
+            logger.warning("更新包下载发起失败: %s", exc)
+            return False
+        try:
+            if resp.status_code != 200:
+                logger.warning(
+                    "更新包下载返回 HTTP %s", resp.status_code
+                )
+                return False
+            try:
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                with open(dest_path, "wb") as fh:
+                    for chunk in resp.iter_content(chunk_size=256 * 1024):
+                        if chunk:
+                            fh.write(chunk)
+            except OSError as exc:
+                logger.warning("更新包写盘失败: %s", exc)
+                return False
+        finally:
+            resp.close()
+        logger.info("更新包下载完成: %s", dest_path)
         return True
 
     # ------------------------------------------------------------------

@@ -37,6 +37,7 @@ const usersRoutes = require('./routes/users');
 const tokenRoutes = require('./routes/token');
 const devicesRoutes = require('./routes/devices');
 const auditRoutes = require('./routes/audit');
+const updatesRoutes = require('./routes/updates');
 const clientRoutes = require('./routes/client');
 
 const DEFAULT_JWT_SECRET = 'homework-time-default-secret-change-me';
@@ -85,6 +86,7 @@ app.use('/api/users', requireAuth, usersRoutes);
 app.use('/api/client-token', requireAuth, tokenRoutes);
 app.use('/api/devices', requireAuth, devicesRoutes);
 app.use('/api/audit-logs', requireAuth, auditRoutes);
+app.use('/api/updates', requireAuth, updatesRoutes);
 
 // ---- 客户端接口（路由内部已用 requireClientToken 统一鉴权）----
 app.use('/api/client', clientRoutes);

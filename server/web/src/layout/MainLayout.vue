@@ -21,6 +21,10 @@
           <el-icon><Headset /></el-icon>
           <span>音频管理</span>
         </el-menu-item>
+        <el-menu-item index="/updates">
+          <el-icon><UploadFilled /></el-icon>
+          <span>更新管理</span>
+        </el-menu-item>
         <el-menu-item index="/users">
           <el-icon><User /></el-icon>
           <span>用户管理</span>

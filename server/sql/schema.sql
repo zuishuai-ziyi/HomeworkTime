@@ -80,6 +80,7 @@ CREATE TABLE `devices` (
   `room_name`           VARCHAR(128) NULL                    COMMENT '教室名 (后台可改)',
   `ip`                  VARCHAR(64)  NULL                    COMMENT '最近心跳时的客户端 IP',
   `client_version`      VARCHAR(32)  NULL                    COMMENT '客户端版本字符串',
+  `update_pending_version` VARCHAR(32) NULL                  COMMENT '已下载待生效的更新版本 (心跳上报, NULL=无)',
   `last_heartbeat`      DATETIME     NULL                    COMMENT '最后一次心跳时间',
   `last_config_version` INT UNSIGNED NULL                    COMMENT '该设备上次成功拉取的 config.version',
   `created_at`          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -113,7 +114,31 @@ CREATE TABLE `audio_files` (
   COMMENT='音频文件元数据 (含内置)';
 
 -- ----------------------------------------------------------------------------
--- 6) audit_logs: 操作日志
+-- 6) client_update: 客户端全量更新包 (单行; id 固定 = 1, 仅保留最新一个包)
+--    管理端上传 zip (PyInstaller onedir 整目录压缩, 根级为 HomeworkTime.exe
+--    与 _internal/ 等) 即视为发布; 回滚 = 重新上传旧包。
+--    effective_time 为管理端指定的客户端生效时间 (客户端到点后替换重启,
+--    若正处于晚自习时段则顺延至晚自习结束), NULL 表示立即生效。
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `client_update`;
+CREATE TABLE `client_update` (
+  `id`             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `version`        VARCHAR(32)  NOT NULL                COMMENT '版本号 (应与包内 update_manifest.json 一致)',
+  `notes`          VARCHAR(500) NULL                    COMMENT '更新说明',
+  `stored_path`    VARCHAR(255) NOT NULL                COMMENT 'zip 包相对服务端根路径',
+  `size`           BIGINT UNSIGNED NOT NULL             COMMENT 'zip 字节数',
+  `sha256`         CHAR(64)     NOT NULL                COMMENT 'zip 十六进制 sha256',
+  `effective_time` DATETIME     NOT NULL                COMMENT '客户端生效时间 (上传时为空则取当前时间=立即生效)',
+  `published_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发布(上传完成)时间',
+  `uploaded_by`    INT UNSIGNED NULL                    COMMENT '上传者 user.id',
+  `created_at`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='客户端全量更新包 (单行, 仅保留最新)';
+
+-- ----------------------------------------------------------------------------
+-- 7) audit_logs: 操作日志
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `audit_logs`;
 CREATE TABLE `audit_logs` (

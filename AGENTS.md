@@ -41,9 +41,11 @@ HomeworkTime/
 │  ├─ local_config.preset.json     # 打包预设（不入库；.gitignore；按需从 example 复制并填写）
 │  ├─ requirements.txt
 │  ├─ app/
-│  │  ├─ main.py                   # AppController 启动 + 状态机
+│  │  ├─ main.py                   # AppController 启动 + 状态机（含远程更新时机判定）
 │  │  ├─ config.py                 # LocalConfig / AppConfig / 离线队列
-│  │  ├─ api_client.py             # 心跳/轮询/补传/音频三态下载
+│  │  ├─ api_client.py             # 心跳/轮询/补传/音频三态下载/更新包流式下载
+│  │  ├─ version.py                # APP_VERSION 版本号单一来源
+│  │  ├─ updater.py                # 远程全量更新（下载/校验/暂存/生效判定/update.bat 替换）
 │  │  ├─ scheduler.py              # 纯函数时间调度（含跨天兼容）
 │  │  ├─ audio.py                  # winsound 异步播放
 │  │  ├─ autostart.py              # 注册表 HKCU\...\Run
@@ -56,7 +58,7 @@ HomeworkTime/
 │  ├─ resources/
 │  │  ├─ sounds/                   # 内置 near.wav / end.wav
 │  │  └─ icons/                    # 悬浮球 / 托盘图标
-│  └─ tests/                       # unittest + smoke 测试
+│  └─ tests/                       # unittest + smoke 测试（含 test_updater）
 └─ server/
    ├─ package.json
    ├─ .env.example                 # 环境变量样例（真实 .env 不入库）
@@ -68,10 +70,11 @@ HomeworkTime/
    │  ├─ default_config.json       # 默认业务配置（与 client 一致）
    │  ├─ smoke_test.js             # validate.js 纯函数冒烟测试
    │  ├─ routes/                   # auth / config / audio / users /
-   │  │                            # token / devices / audit / client
+   │  │                            # token / devices / audit / client / updates
    │  └─ utils/                    # seed（幂等初始化）、validate、audit
    ├─ sql/schema.sql               # 建库建表 + 初始数据（演示用）
    ├─ uploads/audio/               # 后台上传音频落点（运行时创建）
+   ├─ uploads/updates/             # 后台上传更新包落点（运行时创建）
    └─ web/                         # Vue3 后台（独立 npm 工程）
       ├─ package.json
       ├─ vite.config.js            # /api、/uploads 代理到 127.0.0.1:3000
@@ -81,8 +84,8 @@ HomeworkTime/
          ├─ stores/auth.js               # token + username 持久化
          ├─ styles/theme.css             # 蓝色调主题（9 色 + EP 主色覆盖）
          ├─ layout/MainLayout.vue
-         └─ views/  Login / ConfigEdit / AudioManage / UserManage /
-                    DeviceMonitor / TokenManage / AuditLogs
+         └─ views/  Login / ConfigEdit / AudioManage / UpdateManage /
+                    UserManage / DeviceMonitor / TokenManage / AuditLogs
 ```
 
 ---

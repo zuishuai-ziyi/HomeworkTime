@@ -25,6 +25,12 @@ const routes = [
         meta: { title: '音频管理' }
       },
       {
+        path: 'updates',
+        name: 'UpdateManage',
+        component: () => import('../views/UpdateManage.vue'),
+        meta: { title: '更新管理' }
+      },
+      {
         path: 'users',
         name: 'UserManage',
         component: () => import('../views/UserManage.vue'),

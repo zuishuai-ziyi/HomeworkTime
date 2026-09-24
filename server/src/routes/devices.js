@@ -14,6 +14,7 @@ router.get('/', async (req, res, next) => {
   try {
     const rows = await query(
       `SELECT id, device_uuid, device_name, room_name, ip, client_version,
+              update_pending_version,
               last_heartbeat, last_config_version, created_at, updated_at,
               TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
        FROM devices

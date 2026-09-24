@@ -52,3 +52,26 @@ export const getAuditLogs = (page, page_size) =>
 export const getClientToken = () => http.get('/client-token')
 /** POST /api/client-token/reset -> { token } */
 export const resetClientToken = () => http.post('/client-token/reset')
+
+// ===================== 更新管理 =====================
+/** GET /api/updates/current -> { item }（当前已发布的全量更新包，未发布过为 null） */
+export const getUpdateInfo = () => http.get('/updates/current')
+/**
+ * POST /api/updates/upload（multipart：file + version + notes + effective_time）
+ * 上传 zip 更新包并立即发布（全量推送，仅保留最新一个包）；effective_time 为空 = 立即生效。
+ * 更新包较大，单独放宽超时（最长 10 分钟）。
+ */
+export const uploadUpdate = (file, version, notes, effectiveTime) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('version', version)
+  if (notes) fd.append('notes', notes)
+  if (effectiveTime) fd.append('effective_time', effectiveTime)
+  return http.post('/updates/upload', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000
+  })
+}
+/** PUT /api/updates/current/effective-time { effective_time } -> { ok, effective_time } */
+export const updateEffectiveTime = (effectiveTime) =>
+  http.put('/updates/current/effective-time', { effective_time: effectiveTime })

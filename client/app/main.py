@@ -24,6 +24,12 @@ AppController 负责组装 QApplication 外的全部组件，并驱动「每秒�
 - 音频保障：业务配置中 sound.near_audio/end_audio 变化或启动时，
   在后台线程 ensure_audio（下载/校验），完成后再启用播放，找不到回退内置。
 
+远程更新集成（Updater，全量包替换式）：
+- 心跳响应携带服务端已发布更新 → Updater 后台下载/校验/解压暂存；
+- 每秒 tick 判定生效时机：到管理端指定生效时间且不在晚自习时段时，
+  拉起 update.bat 并退出进程，由脚本完成替换与重启；
+- 启动时 startup_check 处理上次应用结果（成功清理 / 失败计数保护）。
+
 提示音：每 tick 调用 scheduler.get_sound_actions，播放 near/end。
 透明度：读取业务配置 opacity.main / opacity.ball 应用到窗口。
 """
@@ -130,13 +136,20 @@ class AppController:
     # 阶段 5：网络同步（独立 QTimer，与 UI 1s tick 分离）
     # ------------------------------------------------------------------
     def _setup_network(self) -> None:
-        """构造 ApiClient，并按 poll_interval_sec 启动网络 tick。
+        """构造 ApiClient 与 Updater，并按 poll_interval_sec 启动网络 tick。
 
         启动后立即执行一次网络 tick（首个心跳/拉取 + 音频保障）。
         """
         from .api_client import ApiClient
+        from .updater import Updater
 
         self.api_client = ApiClient(self.local_config, self.app_config)
+        #: 远程更新控制器（启动即检查上次应用结果）
+        self.updater = Updater()
+        try:
+            self.updater.startup_check()
+        except Exception as exc:
+            logger.warning("更新启动检查异常: %s", exc)
         #: 上一轮网络 tick 的在线状态；None 表示尚未确认（首 tick 触发日志）
         self._last_online: Optional[bool] = None
         #: 已保障过的音频文件名元组（变化时才重新 ensure_audio）
@@ -172,6 +185,11 @@ class AppController:
         if not client.base_url or not client.token:
             self._set_online_state(False)
             return
+        # 心跳上报前刷新「待生效更新版本」（供后台观察设备更新进度）
+        try:
+            client.pending_update_version = self.updater.pending_version()
+        except Exception:
+            client.pending_update_version = None
         try:
             ok = client.heartbeat()
         except Exception as exc:
@@ -190,6 +208,11 @@ class AppController:
                     self.api_client.poll()
                 except Exception as exc:
                     logger.warning("恢复后立即拉取配置异常: %s", exc)
+            # 远程更新：按心跳下发的更新信息推进（下载/校验/解压/同步生效时间）
+            try:
+                self.updater.evaluate(client.server_update, client)
+            except Exception as exc:
+                logger.warning("远程更新评估异常: %s", exc)
             self._ensure_audio_if_needed()
         else:
             self._set_online_state(False)
@@ -269,6 +292,33 @@ class AppController:
             self.audio.set_enabled(True)
         except Exception:
             pass
+
+    # ------------------------------------------------------------------
+    # 远程更新
+    # ------------------------------------------------------------------
+    def _maybe_apply_update(self, state: ScheduleState, now: datetime) -> bool:
+        """判定并应用远程更新；应用成功则退出进程（由更新脚本重启）。
+
+        时机条件由 updater.should_apply 纯函数决定：更新包就绪、未超失败
+        上限、到管理端指定生效时间、且当前不在晚自习时段（晚自习内顺延，
+        结束后下一次 tick 立即执行）。
+        """
+        updater = getattr(self, "updater", None)
+        if updater is None:
+            return False
+        try:
+            applied = updater.maybe_apply(now, state.in_evening)
+        except Exception as exc:
+            logger.exception("远程更新应用异常: %s", exc)
+            return False
+        if applied:
+            logger.info(
+                "开始应用远程更新 v%s，程序退出后由更新脚本完成替换并重启",
+                updater.state.get("target_version") or "?",
+            )
+            self.app.quit()
+            return True
+        return False
 
     # ------------------------------------------------------------------
     # 托盘
@@ -351,6 +401,10 @@ class AppController:
         cfg = self.app_config.data
         state = get_state(cfg, now)
         t = now.hour * 3600 + now.minute * 60 + now.second
+
+        # 0) 远程更新：到生效时间且不在晚自习 → 拉起更新脚本并退出重启
+        if self._maybe_apply_update(state, now):
+            return
 
         # 1) 提示音
         self._play_sounds(cfg, state, t)
