@@ -5,7 +5,9 @@
 - 鼠标按住可拖动移动窗口；右上角 × 隐藏并发射 closed_to_ball 信号；
 - set_bottom_mode() 切换置顶/置底（晚自习外置底显示）；
 - Qt.Tool 标志 → 不占任务栏；
-- refresh(state) 接收 scheduler.get_state 的结果刷新界面。
+- refresh(state) 接收 scheduler.get_state 的结果刷新界面；
+- 颜色取自 app.theme 当前激活主题（业务配置 theme 下发后由控制器
+  调 set_active_theme + refresh_theme 生效）。
 """
 
 from __future__ import annotations
@@ -24,22 +26,20 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from .. import theme
 from ..scheduler import ScheduleState, SubjectInfo, format_seconds
 
-#: 卡片背景（深色半透明）
-BG_COLOR = QColor(2, 62, 138, 235)
 RADIUS = 16
 #: 主窗口默认尺寸
 WINDOW_WIDTH = 440
 WINDOW_HEIGHT = 620
 
-#: 时间轴配色
+#: 时间轴基础样式（颜色部分由 refresh_theme 动态注入）
 TIMELINE_ITEM_STYLE = (
     "QListWidget#timeline{background:transparent;border:none;"
     "font-size:13px;color:#D8DEE9;}"
     "QListWidget#timeline::item{padding:2px 8px;border-radius:6px;}"
 )
-TIMELINE_CURRENT_BG = "#0077B6"
 
 
 class MainWindow(QWidget):
@@ -70,6 +70,7 @@ class MainWindow(QWidget):
         self._state: Optional[ScheduleState] = None
 
         self._build_ui()
+        self.refresh_theme()
 
     # ------------------------------------------------------------------
     # UI 构建
@@ -148,12 +149,20 @@ class MainWindow(QWidget):
     # 样式辅助
     # ------------------------------------------------------------------
     def paintEvent(self, event) -> None:  # noqa: N802
-        """自绘圆角深色半透明背景。"""
+        """自绘圆角半透明背景（颜色 = 业务配置 theme.card）。"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), RADIUS, RADIUS)
-        painter.fillPath(path, BG_COLOR)
+        # 保留原卡片色的半透明质感（alpha 235）
+        painter.fillPath(path, theme.card_color(235))
+
+    def refresh_theme(self) -> None:
+        """业务配置 theme 变化后重刷与主题相关的样式（不重建窗口）。"""
+        self.update()  # 触发 paintEvent 重绘卡片底色
+        # 时间轴条目颜色在 _refresh_timeline 内按主题取色，整体重建
+        if self._state is not None:
+            self._refresh_timeline(self._state)
 
     # ------------------------------------------------------------------
     # 外部设置
@@ -287,13 +296,13 @@ class MainWindow(QWidget):
             item = QListWidgetItem(f"{sub.start} — {sub.end}　{sub.name}")
             item.setSizeHint(item.sizeHint())
             if is_current:
-                item.setBackground(QColor(TIMELINE_CURRENT_BG))
+                item.setBackground(theme.accent_color())
                 item.setForeground(QColor("#FFFFFF"))
                 f = item.font()
                 f.setBold(True)
                 item.setFont(f)
             else:
-                item.setBackground(QColor(3, 4, 94, 200))
+                item.setBackground(theme.timeline_color(200))
                 item.setForeground(QColor("#D8DEE9"))
             self.timeline.addItem(item)
 

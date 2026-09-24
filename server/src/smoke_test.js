@@ -135,6 +135,36 @@ check('非法音频文件名（路径穿越）被拒绝', () => {
   assert.strictEqual(r.ok, false);
 });
 
+check('theme 合法色值通过校验并归一化为大写', () => {
+  const c = baseConfig();
+  c.theme = { card: '#023e8a', accent: '#12ab34', timeline: '#03045E' };
+  const r = validateAndMerge(c);
+  assert.strictEqual(r.ok, true, JSON.stringify(r.errors));
+  assert.deepStrictEqual(r.merged.theme, {
+    card: '#023E8A', accent: '#12AB34', timeline: '#03045E'
+  });
+});
+
+check('theme 非法色值（#FFF / red）被拒绝', () => {
+  const c = baseConfig();
+  c.theme = { card: '#FFF' };
+  const r = validateAndMerge(c);
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.errors.some((e) => e.includes('theme.card')), JSON.stringify(r.errors));
+  const c2 = baseConfig();
+  c2.theme = { accent: 'red' };
+  const r2 = validateAndMerge(c2);
+  assert.strictEqual(r2.ok, false);
+});
+
+check('theme 存在未知字段被拒绝', () => {
+  const c = baseConfig();
+  c.theme = { ...c.theme, junk: '#123456' };
+  const r = validateAndMerge(c);
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.errors.some((e) => e.includes('junk')), JSON.stringify(r.errors));
+});
+
 check('未知顶层字段被拒绝', () => {
   const c = baseConfig();
   c.unknown_key = 1;
@@ -174,7 +204,7 @@ check('晚自习 evening_start 等于 evening_end 被拒绝', () => {
 check('merge 后输出为完整 JSON（含全部必需字段）', () => {
   const r = validateAndMerge({});
   assert.strictEqual(r.ok, true, JSON.stringify(r.errors));
-  for (const key of ['evening_start', 'evening_end', 'subjects', 'opacity', 'allow_local_edit', 'idle_text', 'sound']) {
+  for (const key of ['evening_start', 'evening_end', 'subjects', 'opacity', 'theme', 'allow_local_edit', 'idle_text', 'sound']) {
     assert.ok(key in r.merged, `缺少字段: ${key}`);
   }
 });

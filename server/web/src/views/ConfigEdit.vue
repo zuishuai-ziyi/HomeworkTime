@@ -86,7 +86,7 @@
       </el-form-item>
 
       <!-- 外观 -->
-      <el-divider content-position="left">外观（透明度）</el-divider>
+      <el-divider content-position="left">外观（透明度 / 主题色）</el-divider>
       <el-form-item label="主窗口透明度">
         <div class="slider-wrap">
           <el-slider v-model="opacityPercent.main" :min="20" :max="100" :step="1" />
@@ -104,6 +104,24 @@
           <el-slider v-model="opacityPercent.config" :min="20" :max="100" :step="1" />
           <span class="slider-val">{{ opacityPercent.config }}%</span>
         </div>
+      </el-form-item>
+      <el-form-item label="窗口主题色">
+        <div class="theme-row">
+          <div class="theme-item">
+            <el-color-picker v-model="form.theme.card" show-alpha :predefine="PRESET_COLORS" />
+            <span class="theme-name">卡片背景</span>
+          </div>
+          <div class="theme-item">
+            <el-color-picker v-model="form.theme.accent" show-alpha :predefine="PRESET_COLORS" />
+            <span class="theme-name">强调色</span>
+          </div>
+          <div class="theme-item">
+            <el-color-picker v-model="form.theme.timeline" show-alpha :predefine="PRESET_COLORS" />
+            <span class="theme-name">时间轴底色</span>
+          </div>
+          <el-button size="small" @click="resetTheme">恢复默认</el-button>
+        </div>
+        <span class="tip">主窗口卡片 / 时间轴高亮 / 确认框按钮的颜色；选带透明度的颜色时客户端按不透明处理</span>
       </el-form-item>
 
       <!-- 行为 -->
@@ -166,6 +184,18 @@ const DEFAULT_SOUND = {
   end_enabled: true
 }
 
+const DEFAULT_THEME = {
+  card: '#023E8A',
+  accent: '#0077B6',
+  timeline: '#03045E'
+}
+
+/** 取色器预置色板（项目主题色板 + 常用深色） */
+const PRESET_COLORS = [
+  '#023E8A', '#03045E', '#0077B6', '#0096C7', '#00B4D8', '#48CAE4',
+  '#1D3557', '#2D3142', '#14532D', '#3F2E56', '#5C1A1B', '#1F2937'
+]
+
 const saving = ref(false)
 const version = ref(1)
 const updatedAt = ref('')
@@ -179,7 +209,8 @@ const form = reactive({
   subjects: [],
   allow_local_edit: true,
   idle_text: '',
-  sound: { ...DEFAULT_SOUND }
+  sound: { ...DEFAULT_SOUND },
+  theme: { ...DEFAULT_THEME }
 })
 
 // 透明度滑条用 20~100 的百分比展示，保存时换算回 0.2~1.0
@@ -198,6 +229,7 @@ function applyConfig(data) {
   form.allow_local_edit = !!c.allow_local_edit
   form.idle_text = c.idle_text || ''
   form.sound = { ...DEFAULT_SOUND, ...(c.sound || {}) }
+  form.theme = { ...DEFAULT_THEME, ...(c.theme || {}) }
   const op = c.opacity || {}
   opacityPercent.main = Math.round((op.main ?? 0.85) * 100)
   opacityPercent.ball = Math.round((op.ball ?? 0.7) * 100)
@@ -262,6 +294,24 @@ function onAllowLocalChange(val) {
     })
 }
 
+function resetTheme() {
+  form.theme = { ...DEFAULT_THEME }
+}
+
+/** 取色器输出（#RRGGBB / #RRGGBBAA / rgba 字符串）归一化为 #RRGGBB；非法返回 null */
+function normalizeHex(value) {
+  if (typeof value !== 'string') return null
+  const v = value.trim()
+  if (/^#[0-9A-Fa-f]{6}$/.test(v)) return v.toUpperCase()
+  if (/^#[0-9A-Fa-f]{8}$/.test(v)) return v.slice(0, 7).toUpperCase()
+  const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(v)
+  if (m) {
+    const hex = m.slice(1).map((n) => Number(n).toString(16).padStart(2, '0')).join('')
+    return ('#' + hex).toUpperCase()
+  }
+  return null
+}
+
 function validate() {
   const errors = []
   if (!HHMM_RE.test(form.evening_start || '')) {
@@ -290,6 +340,12 @@ function validate() {
       errors.push(`${pos}：开始时间不能等于结束时间`)
     }
   })
+  const themeNames = { card: '卡片背景', accent: '强调色', timeline: '时间轴底色' }
+  for (const [key, name] of Object.entries(themeNames)) {
+    if (!normalizeHex(form.theme[key])) {
+      errors.push(`${name}颜色格式不正确（应为 #RRGGBB）`)
+    }
+  }
   return errors
 }
 
@@ -306,6 +362,11 @@ function buildPayload() {
       main: opacityPercent.main / 100,
       ball: opacityPercent.ball / 100,
       config: opacityPercent.config / 100
+    },
+    theme: {
+      card: normalizeHex(form.theme.card),
+      accent: normalizeHex(form.theme.accent),
+      timeline: normalizeHex(form.theme.timeline)
     },
     allow_local_edit: !!form.allow_local_edit,
     idle_text: (form.idle_text || '').trim(),
@@ -417,6 +478,24 @@ onMounted(() => {
   font-size: 14px;
   color: #1f2329;
   flex-shrink: 0;
+}
+
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.theme-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-name {
+  font-size: 13px;
+  color: #1f2329;
 }
 
 .el-form-item {

@@ -33,6 +33,10 @@ function deepClone(obj) {
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** 音频文件名正则（仅字母数字 _ - . 且 .wav 结尾） */
 const WAV_RE = /^[A-Za-z0-9._-]+\.wav$/;
+/** 主题色 #RRGGBB 正则（与 schema pattern 一致） */
+const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
+/** theme 合法键（与 schema properties 一致） */
+const THEME_KEYS = ['card', 'accent', 'timeline'];
 
 /** "HH:MM" 转当天分钟数 */
 function toMinutes(hhmm) {
@@ -148,7 +152,29 @@ function validateAndMerge(input) {
     }
   }
 
-  // ---- 5) allow_local_edit：布尔 ----
+  // ---- 5) theme：card/accent/timeline 均为 #RRGGBB ----
+  const themeVal = input.theme;
+  if (themeVal === undefined) {
+    // 使用默认值
+  } else if (!themeVal || typeof themeVal !== 'object' || Array.isArray(themeVal)) {
+    errors.push('配置项 theme 必须为对象');
+  } else {
+    for (const k of Object.keys(themeVal)) {
+      if (!THEME_KEYS.includes(k)) errors.push(`theme 存在未知字段: ${k}`);
+    }
+    for (const k of THEME_KEYS) {
+      const v = themeVal[k];
+      if (v === undefined) {
+        merged.theme[k] = defaults.theme[k];
+      } else if (typeof v !== 'string' || !HEX_RE.test(v)) {
+        errors.push(`theme.${k} 必须为 #RRGGBB 格式的颜色值（如 #023E8A）`);
+      } else {
+        merged.theme[k] = v.toUpperCase();
+      }
+    }
+  }
+
+  // ---- 6) allow_local_edit：布尔 ----
   if (input.allow_local_edit !== undefined) {
     if (typeof input.allow_local_edit !== 'boolean') {
       errors.push('allow_local_edit 必须为布尔值');
@@ -157,7 +183,7 @@ function validateAndMerge(input) {
     }
   }
 
-  // ---- 6) idle_text：1~64 字符字符串 ----
+  // ---- 7) idle_text：1~64 字符字符串 ----
   if (input.idle_text !== undefined) {
     if (typeof input.idle_text !== 'string' || input.idle_text.trim().length < 1 || input.idle_text.length > 64) {
       errors.push('idle_text 必须为 1~64 字符的字符串');
@@ -166,7 +192,7 @@ function validateAndMerge(input) {
     }
   }
 
-  // ---- 7) sound：总开关/临近阈值/音频文件名/各自开关 ----
+  // ---- 8) sound：总开关/临近阈值/音频文件名/各自开关 ----
   const sVal = input.sound;
   if (sVal === undefined) {
     // 使用默认值
@@ -214,7 +240,7 @@ function validateAndMerge(input) {
     }
   }
 
-  // ---- 8) 科目区间合理性 ----
+  // ---- 9) 科目区间合理性 ----
   // "不要求覆盖"晚自习全部区间，但科目段应落在晚自习起止范围内，且互不重叠
   if (eveningStart !== null && eveningEnd !== null && segments.length > 0) {
     const esm = toMinutes(eveningStart);

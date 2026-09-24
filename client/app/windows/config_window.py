@@ -5,6 +5,7 @@
 - 晚自习起止时间（QTimeEdit HH:MM）；
 - 科目时间段编辑器（QTableWidget：科目名/开始/结束，增删按钮、≤10 行）；
 - 主窗口/悬浮球/配置窗口 3 个透明度滑条（20%–100%）；
+- 窗口主题色（卡片背景 / 强调色 / 时间轴底色，#RRGGBB，取色器选择）；
 - 「允许本地修改配置」开关（关闭时二次确认）；
 - 空档期显示文本；
 - 提示音：总开关、临近阈值秒数(1–3600)、near/end 各自开关与音频文件名下拉
@@ -29,8 +30,10 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from PyQt5.QtCore import Qt, QTime
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDialog,
     QFormLayout,
@@ -51,6 +54,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from .. import theme as theme_mod
 from ..config import AppConfig, CACHE_SOUNDS_DIR, LocalConfig, save_pending
 from ..logger import get_logger
 
@@ -60,6 +64,15 @@ logger = get_logger("config_window")
 BUILTIN_AUDIO = ("near.wav", "end.wav")
 
 _HHMM_RE = re.compile(r"^\d{1,2}:\d{2}$")
+#: 主题色 #RRGGBB（与业务配置契约一致）
+_HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+#: theme 合法键
+_THEME_KEYS = ("card", "accent", "timeline")
+_THEME_LABELS = {
+    "card": "卡片背景",
+    "accent": "强调色",
+    "timeline": "时间轴底色",
+}
 
 _INPUT_STYLE = (
     "QLineEdit{border:1px solid #90E0EF;border-radius:6px;padding:5px 8px;"
@@ -106,6 +119,23 @@ def validate_subjects(rows: List[Dict[str, str]]) -> Tuple[bool, str]:
             return False, "第 %d 行：结束时间格式应为 HH:MM，当前为 %r" % (i, end)
         if start == end:
             return False, "第 %d 行：开始与结束时间不能相同" % i
+    return True, ""
+
+
+def validate_theme(values: Dict[str, str]) -> Tuple[bool, str]:
+    """校验主题色三元组（供表单保存前置校验与单测复用）。
+
+    values: {"card", "accent", "timeline"}，缺键以默认主题补齐后校验。
+    规则：每个值必须为 #RRGGBB（大小写不限）。
+    """
+    merged = dict(theme_mod.DEFAULT_THEME)
+    merged.update({k: v for k, v in (values or {}).items() if k in _THEME_KEYS})
+    for key in _THEME_KEYS:
+        value = merged.get(key)
+        if not isinstance(value, str) or not _HEX_RE.match(value.strip()):
+            return False, "%s 颜色格式应为 #RRGGBB，当前为 %r" % (
+                _THEME_LABELS[key], value
+            )
     return True, ""
 
 
@@ -289,8 +319,8 @@ class ConfigWindow(QDialog):
         self.add_btn.clicked.connect(self._on_add_subject)
         self.del_btn.clicked.connect(self._on_delete_subject)
 
-        # ---- 外观（透明度） ----
-        g3 = QGroupBox("外观（透明度）", self._form_widget)
+        # ---- 外观（透明度 + 主题色） ----
+        g3 = QGroupBox("外观（透明度 / 主题色）", self._form_widget)
         g3.setStyleSheet(_GROUP_STYLE)
         g3_form = QFormLayout(g3)
         for key, label_text in (
@@ -311,6 +341,25 @@ class ConfigWindow(QDialog):
             row.addStretch(1)
             g3_form.addRow(label_text, row)
             self._sliders[key] = (slider, pct)
+
+        # 主题色（点击色块打开取色器，业务配置 theme 三键）
+        self._theme_btns: Dict[str, Tuple[QPushButton, QLabel]] = {}
+        for key in _THEME_KEYS:
+            row = QHBoxLayout()
+            btn = QPushButton(self)
+            btn.setFixedSize(36, 24)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFlat(True)
+            btn.clicked.connect(
+                lambda _=False, k=key: self._pick_theme_color(k)
+            )
+            hex_label = QLabel("#023E8A")
+            hex_label.setFixedWidth(78)
+            row.addWidget(btn)
+            row.addWidget(hex_label)
+            row.addStretch(1)
+            g3_form.addRow(_THEME_LABELS[key], row)
+            self._theme_btns[key] = (btn, hex_label)
         form.addWidget(g3)
         self._groups.append(g3)
 
@@ -392,6 +441,11 @@ class ConfigWindow(QDialog):
             pct_val = max(20, min(100, pct_val))
             slider.setValue(pct_val)
 
+        # 主题色（业务配置 theme，缺省回落默认色板）
+        theme_cfg = theme_mod.normalize_theme(data.get("theme"))
+        for key in _THEME_KEYS:
+            self._set_theme_color_ui(key, theme_cfg[key])
+
         # 提示音
         sound = data.get("sound") or {}
         self.sound_enabled.setChecked(bool(sound.get("enabled", True)))
@@ -446,6 +500,35 @@ class ConfigWindow(QDialog):
             str(x.get("filename")) for x in items if x and x.get("filename")
         ]
         return names or None
+
+    # ------------------------------------------------------------------
+    # 主题色编辑
+    # ------------------------------------------------------------------
+    def _current_theme(self) -> Dict[str, str]:
+        """合并默认主题与当前表单选择（供校验/收集/预览）。"""
+        values = dict(theme_mod.DEFAULT_THEME)
+        for key in _THEME_KEYS:
+            btn, hex_label = self._theme_btns[key]
+            values[key] = hex_label.text().strip()
+        return values
+
+    def _set_theme_color_ui(self, key: str, hex_color: str) -> None:
+        """更新某个主题键的色块与十六进制文本。"""
+        color = theme_mod.qcolor_from_hex(hex_color)
+        btn, hex_label = self._theme_btns[key]
+        btn.setStyleSheet(
+            "QPushButton{background:%s;border:1px solid #90E0EF;"
+            "border-radius:4px;}" % color.name()
+        )
+        hex_label.setText(color.name().upper())
+
+    def _pick_theme_color(self, key: str) -> None:
+        """点击色块 → 打开系统取色器。"""
+        btn, hex_label = self._theme_btns[key]
+        initial = theme_mod.qcolor_from_hex(hex_label.text())
+        color = QColorDialog.getColor(initial, self, "选择%s" % _THEME_LABELS[key])
+        if color.isValid():
+            self._set_theme_color_ui(key, color.name())
 
     # ------------------------------------------------------------------
     # 科目表操作
@@ -505,6 +588,12 @@ class ConfigWindow(QDialog):
             opacity[key] = slider.value() / 100.0
         cfg["opacity"] = opacity
 
+        # 主题色（色块选择结果；非法输入由 _validate 前置拦截）
+        cfg["theme"] = {
+            key: value.upper()
+            for key, value in self._current_theme().items()
+        }
+
         sound = dict(cfg.get("sound") or {})
         sound["enabled"] = bool(self.sound_enabled.isChecked())
         sound["near_seconds"] = int(self.near_spin.value())
@@ -523,6 +612,9 @@ class ConfigWindow(QDialog):
         end = self.end_edit.time().toString("HH:mm")
         if start == end:
             return False, "晚自习开始与结束时间不能相同"
+        ok, err = validate_theme(self._current_theme())
+        if not ok:
+            return False, err
         return True, ""
 
     # ------------------------------------------------------------------

@@ -32,6 +32,8 @@ AppController 负责组装 QApplication 外的全部组件，并驱动「每秒�
 
 提示音：每 tick 调用 scheduler.get_sound_actions，播放 near/end。
 透明度：读取业务配置 opacity.main / opacity.ball 应用到窗口。
+主题色：业务配置 theme（card/accent/timeline）驱动主窗口与确认框配色，
+启动与配置变更时经 app.theme.set_active_theme + 各窗口 refresh_theme 生效。
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QApplication, QDialog
 
 from . import autostart
+from . import theme as theme_mod
 from .config import AppConfig, LocalConfig, load_pending
 from .logger import get_logger
 from .scheduler import ScheduleState, get_sound_actions, get_state
@@ -83,6 +86,9 @@ class AppController:
         self.tray: Optional[Tray] = None
 
         cfg = self.app_config.data
+
+        # 激活业务配置主题色（主窗口 / 确认框取色基准）
+        theme_mod.set_active_theme(cfg.get("theme"))
 
         from .audio import AudioPlayer  # 延迟导入，避免构造时依赖平台
 
@@ -567,6 +573,12 @@ class AppController:
         """业务配置变更（阶段 2 起可能来自配置窗口/服务器下发）。"""
         self._apply_opacities(cfg)
         self.main_window.set_idle_text(cfg.get("idle_text", "课间休息"))
+        # 主题色变化 → 更新全局激活主题并重刷主窗口（确认框按次构造取色）
+        theme_mod.set_active_theme(cfg.get("theme"))
+        try:
+            self.main_window.refresh_theme()
+        except Exception as exc:
+            logger.warning("主窗口主题刷新失败: %s", exc)
         try:
             self.float_ball.set_ball_size(
                 int(self.local_config.get("ball_size", 64))

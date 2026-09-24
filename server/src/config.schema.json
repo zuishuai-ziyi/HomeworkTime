@@ -10,6 +10,7 @@
     "evening_end",
     "subjects",
     "opacity",
+    "theme",
     "allow_local_edit",
     "idle_text",
     "sound"
@@ -84,6 +85,36 @@
           "minimum": 0.2,
           "maximum": 1.0,
           "default": 1.00
+        }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "title": "窗口主题色",
+      "description": "客户端窗口可自定义颜色 (#RRGGBB):card=主窗口/确认框卡片背景,accent=强调色(时间轴当前段高亮/确认框主按钮),timeline=时间轴非当前条目底色。",
+      "additionalProperties": false,
+      "required": ["card", "accent", "timeline"],
+      "properties": {
+        "card": {
+          "type": "string",
+          "title": "卡片背景色",
+          "description": "主窗口与确认框的自绘圆角底色。",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "default": "#023E8A"
+        },
+        "accent": {
+          "type": "string",
+          "title": "强调色",
+          "description": "时间轴当前段高亮、确认框主按钮颜色。",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "default": "#0077B6"
+        },
+        "timeline": {
+          "type": "string",
+          "title": "时间轴底色",
+          "description": "时间轴非当前条目的底色。",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "default": "#03045E"
         }
       }
     },

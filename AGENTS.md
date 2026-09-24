@@ -45,6 +45,7 @@ HomeworkTime/
 │  │  ├─ config.py                 # LocalConfig / AppConfig / 离线队列
 │  │  ├─ api_client.py             # 心跳/轮询/补传/音频三态下载/更新包流式下载
 │  │  ├─ version.py                # APP_VERSION 版本号单一来源
+│  │  ├─ theme.py                  # 窗口主题色（业务配置 theme 激活/取色）
 │  │  ├─ updater.py                # 远程全量更新（下载/校验/暂存/生效判定/update.bat 替换）
 │  │  ├─ scheduler.py              # 纯函数时间调度（含跨天兼容）
 │  │  ├─ audio.py                  # winsound 异步播放
@@ -58,7 +59,7 @@ HomeworkTime/
 │  ├─ resources/
 │  │  ├─ sounds/                   # 内置 near.wav / end.wav
 │  │  └─ icons/                    # 悬浮球 / 托盘图标
-│  └─ tests/                       # unittest + smoke 测试（含 test_updater）
+│  └─ tests/                       # unittest + smoke 测试（含 test_updater / test_theme）
 └─ server/
    ├─ package.json
    ├─ .env.example                 # 环境变量样例（真实 .env 不入库）

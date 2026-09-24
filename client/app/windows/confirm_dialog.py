@@ -3,12 +3,13 @@
 
 用于悬浮球右键「是否打开配置窗口」的二次确认（阶段 2 配置窗口的入口确认）。
 窗口为无边框圆角半透明样式，与主窗口视觉一致。
+颜色取自 app.theme 当前激活主题（业务配置 theme 下发后自动生效）。
 """
 
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt, QRectF
-from PyQt5.QtGui import QColor, QPainter, QPainterPath
+from PyQt5.QtGui import QPainter, QPainterPath
 from PyQt5.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -18,8 +19,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-#: 背景色（深色半透明），与主窗口卡片一致
-_BG_COLOR = QColor(2, 62, 138, 245)
+from .. import theme
+
 _RADIUS = 12
 
 
@@ -42,6 +43,11 @@ class ConfirmDialog(QDialog):
         self.setWindowTitle(title)
         self.setFixedWidth(320)
         self.setModal(True)
+
+        # 构造时快照当前强调色（对话框为短生命周期模态，无需动态刷新）
+        self._accent_hex = (
+            theme.active_theme().get("accent") or theme.DEFAULT_THEME["accent"]
+        )
 
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 18, 20, 16)
@@ -76,14 +82,18 @@ class ConfirmDialog(QDialog):
         btn_row.addStretch(1)
         root.addLayout(btn_row)
 
-    @staticmethod
-    def _btn_style(primary: bool) -> str:
+    def _btn_style(self, primary: bool) -> str:
         if primary:
+            accent = self._accent_hex
             return (
-                "QPushButton{background:#0077B6; color:white; border:none;"
-                "border-radius:6px; font-size:13px;}"
-                "QPushButton:hover{background:#00558F;}"
-                "QPushButton:pressed{background:#023E8A;}"
+                "QPushButton{{background:{accent}; color:white; border:none;"
+                "border-radius:6px; font-size:13px;}}"
+                "QPushButton:hover{{background:{hover};}}"
+                "QPushButton:pressed{{background:{pressed};}}"
+            ).format(
+                accent=accent,
+                hover=theme.darker_hex(accent, 135),
+                pressed=theme.darker_hex(accent, 160),
             )
         return (
             "QPushButton{background:rgba(202, 240, 248, 38); color:#CAF0F8; border:none;"
@@ -94,12 +104,13 @@ class ConfirmDialog(QDialog):
 
     # ------------------------------------------------------------------
     def paintEvent(self, event) -> None:  # noqa: N802 (Qt 命名)
-        """自绘圆角半透明背景。"""
+        """自绘圆角半透明背景（颜色 = 业务配置 theme.card）。"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), _RADIUS, _RADIUS)
-        painter.fillPath(path, _BG_COLOR)
+        # 保留原卡片色的半透明质感（alpha 245）
+        painter.fillPath(path, theme.card_color(245))
 
     @classmethod
     def ask(cls, parent: QWidget, message: str,
