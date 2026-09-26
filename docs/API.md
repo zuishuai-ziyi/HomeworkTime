@@ -698,7 +698,7 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 ### 4.20 `GET /api/installs`
 
 - 鉴权：`requireAuth`（JWT）
-- 描述：列出一键安装包（多行表 `install_packages`，按创建时间倒序）。`items` 含按 `client_base_url` 派生的 `script_url` 与长命令 `command`；不含 `stored_path`。
+- 描述：列出一键安装包（多行表 `install_packages`，按创建时间倒序）。`items` 含按 `client_base_url` 派生的 `script_url` 与长命令 `command`；已生成过短链的条目同时返回 `short_url` / `short_command`（安装命令对话框直接展示，免重复生成）；不含 `stored_path`。
 
 成功响应 `200`：
 
@@ -719,6 +719,8 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
       "embed_config": true,
       "enabled": true,
       "download_count": 12,
+      "short_url": "https://s.example.com/htinstall",
+      "short_command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm '<short_url>' | iex\"",
       "created_by": "admin",
       "created_at": "2026-09-26 10:00:00",
       "script_url": "http://homeworktime.example.com:81/api/install/s/AbCdEf1234567890",
@@ -758,7 +760,7 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 { "install_dir": "D:\\HT", "client_base_url": "http://hw.school.lan:81", "embed_config": false, "enabled": false, "version": "1.1.0", "notes": "..." }
 ```
 
-成功响应 `200`：`{"item": <更新后的 item>}`。`enabled=false` 后脚本与安装包下载接口立即 404。
+成功响应 `200`：`{"item": <更新后的 item>}`。`enabled=false` 后脚本与安装包下载接口立即 404。`client_base_url` 变更时脚本地址随之变化，已保存的 `short_url` 自动置空（旧短链指向旧地址，视为失效，需重新生成）。
 
 错误响应：`400` 无有效字段 / 字段非法；`404` 安装包不存在。
 
@@ -774,7 +776,7 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 ### 4.24 `POST /api/installs/:id/shortlink`
 
 - 鉴权：`requireAuth`（JWT）
-- 描述：调用自托管 [Sink](https://github.com/zuishuai-ziyi/Sink) 短链服务的 `POST /api/link/upsert`（Bearer 鉴权），把该安装包的脚本地址注册为短链。`sink_url` / `sink_api_key` 未随请求传入时，回退到 `sink_settings` 表已保存配置（见 4.26）。重复调用同 `slug` 幂等（Sink 返回 `status:"existing"` 直接复用）。审计日志 `install.shortlink` 不记录 Key 值。
+- 描述：调用自托管 [Sink](https://github.com/zuishuai-ziyi/Sink) 短链服务的 `POST /api/link/upsert`（Bearer 鉴权），把该安装包的脚本地址注册为短链。`sink_url` / `sink_api_key` 未随请求传入时，回退到 `sink_settings` 表已保存配置（见 4.26）。重复调用同 `slug` 幂等（Sink 返回 `status:"existing"` 直接复用）。生成成功后短链持久化到 `install_packages.short_url`（重新生成覆盖），列表（4.20）与安装命令对话框直接展示已有短链。审计日志 `install.shortlink` 不记录 Key 值。
 
 请求体：
 

@@ -157,6 +157,49 @@
             <span class="mono">{{ commandRow.script_url }}</span>
           </el-descriptions-item>
         </el-descriptions>
+        <template v-if="commandRow.short_url">
+          <el-alert
+            class="block"
+            type="success"
+            :closable="false"
+            show-icon
+            title="该安装包已生成短链，目标机安装推荐使用以下短链命令（更短，便于口头转达 / 手工敲入）。"
+          />
+          <el-form label-width="110px" class="block">
+            <el-form-item label="短链">
+              <el-input :model-value="commandRow.short_url" readonly class="mono">
+                <template #append>
+                  <el-button @click="copyText(commandRow.short_url)">
+                    <el-icon><CopyDocument /></el-icon>
+                  </el-button>
+                </template>
+              </el-input>
+            </el-form-item>
+            <el-form-item label="短链安装命令">
+              <el-input
+                :model-value="commandRow.short_command"
+                readonly
+                :rows="3"
+                type="textarea"
+                class="mono"
+              />
+            </el-form-item>
+          </el-form>
+          <div style="margin-bottom: 10px; text-align: right">
+            <el-button type="primary" @click="copyText(commandRow.short_command)">
+              <el-icon style="margin-right: 4px"><CopyDocument /></el-icon>
+              复制短链命令
+            </el-button>
+          </div>
+        </template>
+        <el-alert
+          v-else
+          class="block"
+          type="info"
+          :closable="false"
+          show-icon
+          title="尚未生成短链；可直接使用下面的完整命令，或通过列表「生成短链」获得更短的命令。"
+        />
         <el-alert
           class="block"
           type="warning"
@@ -219,6 +262,14 @@
         </div>
         <template v-if="shortlinkResult">
           <el-divider />
+          <el-alert
+            v-if="shortlinkResult.existing"
+            class="block"
+            type="success"
+            :closable="false"
+            show-icon
+            title="以下为该安装包已生成的短链，可直接复制使用；如需更换可重新生成。"
+          />
           <el-form label-width="110px">
             <el-form-item label="短链">
               <el-input :model-value="shortlinkResult.short_url" readonly class="mono">
@@ -470,7 +521,10 @@ async function submitSinkSettings() {
 
 function openShortlink(row) {
   shortlinkRow.value = row
-  shortlinkResult.value = null
+  // 已生成过短链 → 直接展示，免重新生成
+  shortlinkResult.value = row.short_url
+    ? { short_url: row.short_url, command: row.short_command, existing: true }
+    : null
   sinkForm.slug = ''
   sinkForm.apiKey = ''
   // 预填服务端已保存的服务地址（没有则留空待填）
@@ -505,6 +559,12 @@ async function submitShortlink() {
       slug: sinkForm.slug.trim()
     })
     shortlinkResult.value = data
+    // 同步列表行（安装命令对话框与短链对话框共用同一行对象）
+    const row = items.value.find((it) => it.id === shortlinkRow.value.id)
+    if (row) {
+      row.short_url = data.short_url
+      row.short_command = data.command
+    }
     ElMessage.success(data.status === 'existing' ? '短链已存在，直接复用' : '短链创建成功')
   } catch (err) {
     ElMessage.error(err.response?.data?.error || '短链生成失败')

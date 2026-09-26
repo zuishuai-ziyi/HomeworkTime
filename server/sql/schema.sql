@@ -162,6 +162,7 @@ CREATE TABLE `install_packages` (
   `embed_config`    TINYINT(1)   NOT NULL DEFAULT 1     COMMENT '1=脚本写入 local_config.json (免引导), 0=不写 (首启弹引导)',
   `enabled`         TINYINT(1)   NOT NULL DEFAULT 1     COMMENT '0=停用 (脚本/包接口返回 404)',
   `download_count`  INT UNSIGNED NOT NULL DEFAULT 0     COMMENT '安装包被下载次数',
+  `short_url`       VARCHAR(255) NULL                    COMMENT '最近一次生成的 Sink 短链 (NULL=未生成; client_base_url 变更时置空)',
   `created_by`      INT UNSIGNED NULL                    COMMENT '创建人 user.id',
   `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

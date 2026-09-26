@@ -133,6 +133,7 @@ function toSinkSettingsItem(row) {
 function toItem(row, creator) {
   if (!row) return null;
   const scriptUrl = buildScriptUrl(row.client_base_url, row.slug);
+  const shortUrl = row.short_url || null;
   return {
     id: row.id,
     slug: row.slug,
@@ -146,6 +147,8 @@ function toItem(row, creator) {
     embed_config: !!row.embed_config,
     enabled: !!row.enabled,
     download_count: Number(row.download_count || 0),
+    short_url: shortUrl,
+    short_command: shortUrl ? buildInstallCommand(shortUrl) : null,
     created_by: creator || null,
     created_at: row.created_at,
     script_url: scriptUrl,
@@ -376,7 +379,12 @@ adminRouter.patch('/:id', async (req, res, next) => {
     const updates = {};
     try {
       if (body.install_dir !== undefined) updates.install_dir = normalizeInstallDir(body.install_dir);
-      if (body.client_base_url !== undefined) updates.client_base_url = normalizeClientBaseUrl(body.client_base_url);
+      if (body.client_base_url !== undefined) {
+        const nextBaseUrl = normalizeClientBaseUrl(body.client_base_url);
+        // 脚本地址随 base_url 变化 → 已生成的短链指向旧地址，置空失效
+        if (nextBaseUrl !== rows[0].client_base_url) updates.short_url = null;
+        updates.client_base_url = nextBaseUrl;
+      }
     } catch (e) {
       return res.status(400).json({ error: e.message });
     }
@@ -536,6 +544,9 @@ adminRouter.post('/:id/shortlink', async (req, res, next) => {
       short_url: shortUrl,
       status: data.status || null
     });
+
+    // 持久化短链：列表/安装命令对话框直接展示，免重复生成
+    await pool.execute('UPDATE install_packages SET short_url = ? WHERE id = ?', [shortUrl, id]);
 
     res.json({
       short_url: shortUrl,
