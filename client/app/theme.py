@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """客户端窗口主题（颜色）模块。
 
-业务配置契约中的 ``theme`` 对象驱动三处可自定义颜色：
+业务配置契约中的 ``theme`` 对象驱动四处可自定义颜色：
 - ``card``     卡片背景（主窗口 / 确认框自绘圆角底色）
 - ``accent``   强调色（时间轴当前段高亮、确认框主按钮）
 - ``timeline`` 时间轴非当前条目底色
+- ``ball``     悬浮球纯色圆底（铃铛图标按底色亮度自动白/深蓝反色）
 
 关键不变量：
 - 所有取色函数（card_color 等）读取**当前激活主题**（模块级单例），
@@ -29,10 +30,17 @@ DEFAULT_THEME: Dict[str, str] = {
     "card": "#023E8A",
     "accent": "#0077B6",
     "timeline": "#03045E",
+    "ball": "#0077B6",
 }
 
 #: theme 合法键（契约顺序固定，新增键须同步双端 schema 与校验器）
-THEME_KEYS = ("card", "accent", "timeline")
+THEME_KEYS = ("card", "accent", "timeline", "ball")
+
+#: 悬浮球铃铛图标用色：浅色底 → 深蓝铃铛，深色底 → 白色铃铛（与色板一致）
+BALL_GLYPH_ON_LIGHT = "#03045E"
+BALL_GLYPH_ON_DARK = "#FFFFFF"
+#: 背景相对亮度阈值：不低于该值视为浅色底（近似加权亮度，0~1）
+BALL_LUMA_LIGHT_THRESHOLD = 0.55
 
 #: 契约颜色格式：#RRGGBB（6 位十六进制）
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
@@ -98,6 +106,35 @@ def accent_color(alpha: int = 255) -> QColor:
 def timeline_color(alpha: int = 255) -> QColor:
     """时间轴非当前条目底色。"""
     return _color("timeline", alpha)
+
+
+def ball_color(alpha: int = 255) -> QColor:
+    """悬浮球纯色圆底底色。"""
+    return _color("ball", alpha)
+
+
+def glyph_color_for_bg(bg_hex: Optional[str]) -> str:
+    """按悬浮球背景色亮度返回铃铛图标用色（纯函数，便于单测）。
+
+    近似相对亮度（加权 RGB）：>= 阈值视为浅色底 → 深蓝铃铛，
+    否则（含非法色值，按深底兜底）→ 白色铃铛。
+    """
+    color = QColor(bg_hex or "")
+    luma = 0.0
+    if color.isValid():
+        luma = (
+            0.2126 * color.redF()
+            + 0.7152 * color.greenF()
+            + 0.0722 * color.blueF()
+        )
+    if luma >= BALL_LUMA_LIGHT_THRESHOLD:
+        return BALL_GLYPH_ON_LIGHT
+    return BALL_GLYPH_ON_DARK
+
+
+def ball_glyph_color() -> str:
+    """按当前激活的悬浮球底色返回铃铛图标用色。"""
+    return glyph_color_for_bg(ball_color().name())
 
 
 def darker_hex(hex_color: str, factor: int = 115) -> str:

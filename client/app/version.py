@@ -13,4 +13,4 @@ update_manifest.json 的 version 一致（build.py 自动保证）。
 from __future__ import annotations
 
 #: 当前客户端版本号（语义化：主.次.修订）
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"

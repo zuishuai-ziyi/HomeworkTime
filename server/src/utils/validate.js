@@ -36,7 +36,7 @@ const WAV_RE = /^[A-Za-z0-9._-]+\.wav$/;
 /** 主题色 #RRGGBB 正则（与 schema pattern 一致） */
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 /** theme 合法键（与 schema properties 一致） */
-const THEME_KEYS = ['card', 'accent', 'timeline'];
+const THEME_KEYS = ['card', 'accent', 'timeline', 'ball'];
 
 /** "HH:MM" 转当天分钟数 */
 function toMinutes(hhmm) {

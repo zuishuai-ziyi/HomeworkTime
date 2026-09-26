@@ -91,9 +91,9 @@
     "theme": {
       "type": "object",
       "title": "窗口主题色",
-      "description": "客户端窗口可自定义颜色 (#RRGGBB):card=主窗口/确认框卡片背景,accent=强调色(时间轴当前段高亮/确认框主按钮),timeline=时间轴非当前条目底色。",
+      "description": "客户端窗口可自定义颜色 (#RRGGBB):card=主窗口/确认框卡片背景,accent=强调色(时间轴当前段高亮/确认框主按钮),timeline=时间轴非当前条目底色,ball=悬浮球纯色圆底。",
       "additionalProperties": false,
-      "required": ["card", "accent", "timeline"],
+      "required": ["card", "accent", "timeline", "ball"],
       "properties": {
         "card": {
           "type": "string",
@@ -115,6 +115,13 @@
           "description": "时间轴非当前条目的底色。",
           "pattern": "^#[0-9A-Fa-f]{6}$",
           "default": "#03045E"
+        },
+        "ball": {
+          "type": "string",
+          "title": "悬浮球背景色",
+          "description": "悬浮球纯色圆底的底色;铃铛图标按底色亮度自动白/深蓝反色。",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "default": "#0077B6"
         }
       }
     },

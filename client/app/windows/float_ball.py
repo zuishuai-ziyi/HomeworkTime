@@ -1,28 +1,81 @@
 # -*- coding: utf-8 -*-
 """圆形悬浮球窗口。
 
-- 无边框 + WA_TranslucentBackground，图标按 ball_size 缩放显示；
+- 无边框 + WA_TranslucentBackground，绘制纯色圆底（业务配置 theme.ball）
+  + 铃铛矢量图标（按底色亮度自动白/深蓝反色）；
 - 单击（移动 ≤5px）→ 发射 clicked() 信号（打开主窗口）；
 - 按住左键移动（>5px）→ 拖动窗口，位置变化经 pos_changed 信号上报；
 - 右键释放 → 弹确认对话框，确认后发射 open_config_requested()（阶段 2 接配置窗口）；
-- set_topmost(bool) 切换置顶/置底（重建窗口标志）。
+- set_topmost(bool) 切换置顶/置底（重建窗口标志）；refresh_theme() 在主题变更后触发重绘。
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional, Tuple
 
-from PyQt5.QtCore import Qt, QPoint, pyqtSignal
+from PyQt5.QtCore import Qt, QPoint, QRectF, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QWidget
 
+from .. import theme as theme_mod
 from ..config import resource_path
 from .confirm_dialog import ConfirmDialog
 
 #: 单击与拖动的判定阈值（像素）
 CLICK_THRESHOLD_PX = 5
-#: 默认图标资源
-DEFAULT_ICON = "resources/icons/ball_64.png"
+#: 默认图标资源（SVG 内 fill="#1296db" 为占位色，绘制时整体替换为反色结果）
+DEFAULT_ICON = "resources/icons/ball_bell.svg"
+#: 图标模板占位填充色（与 ball_bell.svg 内一致）
+_GLYPH_PLACEHOLDER = b"#1296db"
+
+#: SVG 模板字节缓存（模块级，进程内读一次）
+_icon_template: Optional[bytes] = None
+#: 铃铛位图缓存：{(尺寸, 图标色): QPixmap}
+_icon_pixmaps: Dict[Tuple[int, str], QPixmap] = {}
+
+
+def _load_icon_template() -> bytes:
+    """读取铃铛 SVG 模板（缺失/读失败返回空字节，绘制时仅画纯色圆底）。"""
+    global _icon_template
+    if _icon_template is None:
+        try:
+            with open(resource_path(DEFAULT_ICON), "rb") as fh:
+                _icon_template = fh.read()
+        except OSError:
+            _icon_template = b""
+    return _icon_template
+
+
+def _icon_pixmap(size: int, glyph_color: str) -> QPixmap:
+    """把 SVG 模板按指定颜色着色并渲染为 size×size 透明位图（带缓存）。
+
+    QtSvg 缺失或渲染失败时返回空 pixmap（保留透明位图，不中断绘制）。
+    """
+    key = (int(size), glyph_color)
+    cached = _icon_pixmaps.get(key)
+    if cached is not None:
+        return cached
+    from PyQt5.QtGui import QPainter
+
+    pix = QPixmap(int(size), int(size))
+    pix.fill(Qt.transparent)
+    data = _load_icon_template()
+    if data:
+        try:
+            from PyQt5.QtSvg import QSvgRenderer
+
+            renderer = QSvgRenderer(
+                data.replace(_GLYPH_PLACEHOLDER, glyph_color.encode("ascii"))
+            )
+            if renderer.isValid():
+                painter = QPainter(pix)
+                painter.setRenderHint(QPainter.Antialiasing, True)
+                renderer.render(painter, QRectF(0, 0, size, size))
+                painter.end()
+        except Exception:
+            pass  # 图标渲染失败 → 保留透明位图，悬浮球仍显示纯色圆底
+    _icon_pixmaps[key] = pix
+    return pix
 
 
 class FloatBall(QWidget):
@@ -35,7 +88,6 @@ class FloatBall(QWidget):
     def __init__(
         self,
         ball_size: int = 64,
-        icon_path: Optional[str] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
         super().__init__(
@@ -44,7 +96,6 @@ class FloatBall(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._ball_size = int(ball_size)
-        self._icon_path = icon_path or resource_path(DEFAULT_ICON)
 
         self._press_pos: Optional[QPoint] = None   # 按下时的窗口位置
         self._press_global: Optional[QPoint] = None  # 按下时的全局鼠标位置
@@ -79,26 +130,27 @@ class FloatBall(QWidget):
     # ------------------------------------------------------------------
     # 绘制
     # ------------------------------------------------------------------
+    def refresh_theme(self) -> None:
+        """业务配置主题变更后触发重绘（paintEvent 每次读当前激活主题）。"""
+        self.update()
+
     def paintEvent(self, event) -> None:  # noqa: N802
-        """绘制缩放到当前尺寸的圆形图标（带透明圆形底）。"""
+        """绘制纯色圆底 + 居中铃铛图标（图标色按底色亮度自动反色）。"""
         from PyQt5.QtGui import QPainter
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        pix = QPixmap(self._icon_path)
-        if pix.isNull():
-            # 图标缺失时画一个纯色圆兜底
-            painter.setBrush(self.palette().highlight())
-            painter.setPen(Qt.NoPen)
-            painter.drawEllipse(self.rect())
-        else:
-            scaled = pix.scaled(
-                self._ball_size, self._ball_size,
-                Qt.KeepAspectRatio, Qt.SmoothTransformation,
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(theme_mod.ball_color())
+        painter.drawEllipse(self.rect())
+        glyph = theme_mod.ball_glyph_color()
+        pix = _icon_pixmap(self._ball_size, glyph)
+        if not pix.isNull():
+            painter.drawPixmap(
+                (self.width() - pix.width()) // 2,
+                (self.height() - pix.height()) // 2,
+                pix,
             )
-            x = (self.width() - scaled.width()) // 2
-            y = (self.height() - scaled.height()) // 2
-            painter.drawPixmap(x, y, scaled)
 
     # ------------------------------------------------------------------
     # 鼠标交互（单击 / 拖动 / 右键）

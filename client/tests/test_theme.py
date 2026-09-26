@@ -4,6 +4,7 @@
 覆盖：
 - normalize_theme：非法输入 / 缺键 / 非法色值回退默认；合法值归一化为大写；
 - set_active_theme / active_theme 全局激活态切换与隔离；
+- ball_color / glyph_color_for_bg：悬浮球底色取色与铃铛图标反色；
 - darker_hex / lighten_hex：合法色变深 / 变亮；非法输入原样返回；
 - qcolor_from_hex：合法 6 位色 / 非法输入回退默认卡片色。
 
@@ -24,10 +25,14 @@ from PyQt5.QtGui import QColor  # noqa: E402
 
 from app.theme import (  # noqa: E402
     DEFAULT_THEME,
+    BALL_GLYPH_ON_DARK,
+    BALL_GLYPH_ON_LIGHT,
     active_theme,
     accent_color,
+    ball_color,
     card_color,
     darker_hex,
+    glyph_color_for_bg,
     lighten_hex,
     normalize_theme,
     qcolor_from_hex,
@@ -46,15 +51,20 @@ class TestNormalizeTheme(unittest.TestCase):
         self.assertEqual(out["card"], "#FF0000")
         self.assertEqual(out["accent"], DEFAULT_THEME["accent"])
         self.assertEqual(out["timeline"], DEFAULT_THEME["timeline"])
+        self.assertEqual(out["ball"], DEFAULT_THEME["ball"])
         # 非法键被忽略
         out2 = normalize_theme({"card": "#123456", "junk": "#456789"})
         self.assertNotIn("junk", out2)
         self.assertEqual(out2["card"], "#123456")
 
     def test_valid_full_theme_roundtrip(self):
-        raw = {"card": "#abcdef", "accent": "#123456", "timeline": "#654321"}
+        raw = {
+            "card": "#abcdef", "accent": "#123456",
+            "timeline": "#654321", "ball": "#00aabb",
+        }
         self.assertEqual(normalize_theme(raw), {
-            "card": "#ABCDEF", "accent": "#123456", "timeline": "#654321",
+            "card": "#ABCDEF", "accent": "#123456",
+            "timeline": "#654321", "ball": "#00AABB",
         })
 
 
@@ -71,11 +81,32 @@ class TestActiveTheme(unittest.TestCase):
         self.assertIsInstance(card_color(), QColor)
         self.assertIsInstance(accent_color(), QColor)
         self.assertIsInstance(timeline_color(), QColor)
+        self.assertIsInstance(ball_color(), QColor)
+
+    def test_ball_color_follows_active_theme(self):
+        set_active_theme({"ball": "#223344"})
+        self.assertEqual(ball_color().name().upper(), "#223344")
 
     def test_active_returns_copy(self):
         snapshot = active_theme()
         snapshot["card"] = "#999999"
         self.assertNotEqual(active_theme()["card"], "#999999")
+
+
+class TestBallGlyphColor(unittest.TestCase):
+    def test_light_bg_returns_dark_glyph(self):
+        self.assertEqual(glyph_color_for_bg("#FFFFFF"), BALL_GLYPH_ON_LIGHT)
+        self.assertEqual(glyph_color_for_bg("#48CAE4"), BALL_GLYPH_ON_LIGHT)
+        # QColor 兼容 3 位 hex：#FFF 即白色 → 深色铃铛
+        self.assertEqual(glyph_color_for_bg("#FFF"), BALL_GLYPH_ON_LIGHT)
+
+    def test_dark_bg_returns_white_glyph(self):
+        self.assertEqual(glyph_color_for_bg("#0077B6"), BALL_GLYPH_ON_DARK)
+        self.assertEqual(glyph_color_for_bg("#03045E"), BALL_GLYPH_ON_DARK)
+
+    def test_invalid_bg_falls_back_to_white(self):
+        for bad in (None, "", "junk", "#12ab"):
+            self.assertEqual(glyph_color_for_bg(bad), BALL_GLYPH_ON_DARK, repr(bad))
 
 
 class TestColorHelpers(unittest.TestCase):

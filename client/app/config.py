@@ -69,7 +69,7 @@ PRESET_PATH = os.path.join(CLIENT_DIR, PRESET_FILENAME)
 
 
 def resource_path(rel: str) -> str:
-    """将相对资源路径（如 resources/icons/ball_64.png）解析为绝对路径。
+    """将相对资源路径（如 resources/icons/ball_bell.svg）解析为绝对路径。
 
     兼容两种运行形态：
     - 源码运行：相对 client/ 根目录解析；

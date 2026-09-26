@@ -5,7 +5,7 @@
 - 晚自习起止时间（QTimeEdit HH:MM）；
 - 科目时间段编辑器（QTableWidget：科目名/开始/结束，增删按钮、≤10 行）；
 - 主窗口/悬浮球/配置窗口 3 个透明度滑条（20%–100%）；
-- 窗口主题色（卡片背景 / 强调色 / 时间轴底色，#RRGGBB，取色器选择）；
+- 窗口主题色（卡片背景 / 强调色 / 时间轴底色 / 悬浮球背景，#RRGGBB，取色器选择）；
 - 「允许本地修改配置」开关（关闭时二次确认）；
 - 空档期显示文本；
 - 提示音：总开关、临近阈值秒数(1–3600)、near/end 各自开关与音频文件名下拉
@@ -67,11 +67,12 @@ _HHMM_RE = re.compile(r"^\d{1,2}:\d{2}$")
 #: 主题色 #RRGGBB（与业务配置契约一致）
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 #: theme 合法键
-_THEME_KEYS = ("card", "accent", "timeline")
+_THEME_KEYS = ("card", "accent", "timeline", "ball")
 _THEME_LABELS = {
     "card": "卡片背景",
     "accent": "强调色",
     "timeline": "时间轴底色",
+    "ball": "悬浮球背景",
 }
 
 _INPUT_STYLE = (
@@ -123,9 +124,9 @@ def validate_subjects(rows: List[Dict[str, str]]) -> Tuple[bool, str]:
 
 
 def validate_theme(values: Dict[str, str]) -> Tuple[bool, str]:
-    """校验主题色三元组（供表单保存前置校验与单测复用）。
+    """校验主题色四键（供表单保存前置校验与单测复用）。
 
-    values: {"card", "accent", "timeline"}，缺键以默认主题补齐后校验。
+    values: {"card", "accent", "timeline", "ball"}，缺键以默认主题补齐后校验。
     规则：每个值必须为 #RRGGBB（大小写不限）。
     """
     merged = dict(theme_mod.DEFAULT_THEME)
@@ -342,7 +343,7 @@ class ConfigWindow(QDialog):
             g3_form.addRow(label_text, row)
             self._sliders[key] = (slider, pct)
 
-        # 主题色（点击色块打开取色器，业务配置 theme 三键）
+        # 主题色（点击色块打开取色器，业务配置 theme 四键）
         self._theme_btns: Dict[str, Tuple[QPushButton, QLabel]] = {}
         for key in _THEME_KEYS:
             row = QHBoxLayout()

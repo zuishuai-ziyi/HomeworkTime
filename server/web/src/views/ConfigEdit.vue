@@ -119,9 +119,13 @@
             <el-color-picker v-model="form.theme.timeline" show-alpha :predefine="PRESET_COLORS" />
             <span class="theme-name">时间轴底色</span>
           </div>
+          <div class="theme-item">
+            <el-color-picker v-model="form.theme.ball" show-alpha :predefine="PRESET_COLORS" />
+            <span class="theme-name">悬浮球背景</span>
+          </div>
           <el-button size="small" @click="resetTheme">恢复默认</el-button>
         </div>
-        <span class="tip">主窗口卡片 / 时间轴高亮 / 确认框按钮的颜色；选带透明度的颜色时客户端按不透明处理</span>
+        <span class="tip">主窗口卡片 / 时间轴高亮 / 确认框按钮 / 悬浮球底色的颜色；选带透明度的颜色时客户端按不透明处理</span>
       </el-form-item>
 
       <!-- 行为 -->
@@ -187,7 +191,8 @@ const DEFAULT_SOUND = {
 const DEFAULT_THEME = {
   card: '#023E8A',
   accent: '#0077B6',
-  timeline: '#03045E'
+  timeline: '#03045E',
+  ball: '#0077B6'
 }
 
 /** 取色器预置色板（项目主题色板 + 常用深色） */
@@ -340,7 +345,12 @@ function validate() {
       errors.push(`${pos}：开始时间不能等于结束时间`)
     }
   })
-  const themeNames = { card: '卡片背景', accent: '强调色', timeline: '时间轴底色' }
+  const themeNames = {
+    card: '卡片背景',
+    accent: '强调色',
+    timeline: '时间轴底色',
+    ball: '悬浮球背景'
+  }
   for (const [key, name] of Object.entries(themeNames)) {
     if (!normalizeHex(form.theme[key])) {
       errors.push(`${name}颜色格式不正确（应为 #RRGGBB）`)
@@ -366,7 +376,8 @@ function buildPayload() {
     theme: {
       card: normalizeHex(form.theme.card),
       accent: normalizeHex(form.theme.accent),
-      timeline: normalizeHex(form.theme.timeline)
+      timeline: normalizeHex(form.theme.timeline),
+      ball: normalizeHex(form.theme.ball)
     },
     allow_local_edit: !!form.allow_local_edit,
     idle_text: (form.idle_text || '').trim(),

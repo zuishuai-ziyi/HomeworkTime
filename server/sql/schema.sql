@@ -238,7 +238,8 @@ INSERT INTO `config` (`id`, `content_json`, `version`, `updated_by`) VALUES
       'theme', JSON_OBJECT(
         'card',     '#023E8A',
         'accent',   '#0077B6',
-        'timeline', '#03045E'
+        'timeline', '#03045E',
+        'ball',     '#0077B6'
       ),
       'allow_local_edit', true,
       'idle_text',        '课间休息',

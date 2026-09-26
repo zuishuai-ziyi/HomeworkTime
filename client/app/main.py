@@ -32,8 +32,8 @@ AppController 负责组装 QApplication 外的全部组件，并驱动「每秒�
 
 提示音：每 tick 调用 scheduler.get_sound_actions，播放 near/end。
 透明度：读取业务配置 opacity.main / opacity.ball 应用到窗口。
-主题色：业务配置 theme（card/accent/timeline）驱动主窗口与确认框配色，
-启动与配置变更时经 app.theme.set_active_theme + 各窗口 refresh_theme 生效。
+主题色：业务配置 theme（card/accent/timeline/ball）驱动主窗口、确认框与
+悬浮球配色，启动与配置变更时经 app.theme.set_active_theme + 各窗口 refresh_theme 生效。
 """
 
 from __future__ import annotations
@@ -579,6 +579,10 @@ class AppController:
             self.main_window.refresh_theme()
         except Exception as exc:
             logger.warning("主窗口主题刷新失败: %s", exc)
+        try:
+            self.float_ball.refresh_theme()
+        except Exception as exc:
+            logger.warning("悬浮球主题刷新失败: %s", exc)
         try:
             self.float_ball.set_ball_size(
                 int(self.local_config.get("ball_size", 64))

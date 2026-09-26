@@ -149,12 +149,20 @@ check('非法音频文件名（路径穿越）被拒绝', () => {
 
 check('theme 合法色值通过校验并归一化为大写', () => {
   const c = baseConfig();
-  c.theme = { card: '#023e8a', accent: '#12ab34', timeline: '#03045E' };
+  c.theme = { card: '#023e8a', accent: '#12ab34', timeline: '#03045E', ball: '#00aabb' };
   const r = validateAndMerge(c);
   assert.strictEqual(r.ok, true, JSON.stringify(r.errors));
   assert.deepStrictEqual(r.merged.theme, {
-    card: '#023E8A', accent: '#12AB34', timeline: '#03045E'
+    card: '#023E8A', accent: '#12AB34', timeline: '#03045E', ball: '#00AABB'
   });
+});
+
+check('theme 缺 ball 键时回填默认悬浮球底色', () => {
+  const c = baseConfig();
+  c.theme = { card: '#023E8A', accent: '#0077B6', timeline: '#03045E' };
+  const r = validateAndMerge(c);
+  assert.strictEqual(r.ok, true, JSON.stringify(r.errors));
+  assert.strictEqual(r.merged.theme.ball, '#0077B6');
 });
 
 check('theme 非法色值（#FFF / red）被拒绝', () => {
@@ -167,6 +175,11 @@ check('theme 非法色值（#FFF / red）被拒绝', () => {
   c2.theme = { accent: 'red' };
   const r2 = validateAndMerge(c2);
   assert.strictEqual(r2.ok, false);
+  const c3 = baseConfig();
+  c3.theme = { ball: '#12ab' };
+  const r3 = validateAndMerge(c3);
+  assert.strictEqual(r3.ok, false);
+  assert.ok(r3.errors.some((e) => e.includes('theme.ball')), JSON.stringify(r3.errors));
 });
 
 check('theme 存在未知字段被拒绝', () => {
