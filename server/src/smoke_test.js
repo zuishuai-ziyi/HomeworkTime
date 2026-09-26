@@ -316,6 +316,13 @@ check('buildInstallScript：embedConfig 时包含下载/解压/local_config 关�
   assert.ok(s.includes('"client_token": "tok123"'));
   assert.ok(s.includes('"autostart": true'));
   assert.ok(s.includes('[System.IO.File]::WriteAllText'));
+  // 桌面快捷方式步骤（[5/6]，非致命 try/catch）+ 启动步骤（[6/6]）
+  assert.ok(s.includes("Write-Host '[5/6] Creating desktop shortcut...'"));
+  assert.ok(s.includes("[Environment]::GetFolderPath('Desktop')"));
+  assert.ok(s.includes('$Lnk.TargetPath = $Exe'));
+  assert.ok(s.includes('$Lnk.WorkingDirectory = $AppDir'));
+  assert.ok(s.includes('$Lnk.Save()'));
+  assert.ok(s.includes("Write-Host '[6/6] Starting HomeworkTime...'"));
   assert.ok(s.includes("Start-Process -FilePath $Exe"));
   assert.ok(!/[\u4e00-\u9fff]/.test(s), '脚本应为纯 ASCII');
   assert.ok(s.endsWith('\r\n'), '脚本应以 CRLF 结尾');

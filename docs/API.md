@@ -849,7 +849,7 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 ### 5.1 `GET /api/install/s/:slug`
 
 - 鉴权：无（slug 即凭据）
-- 描述：返回 PowerShell 一键安装脚本文本。`embed_config=1` 时脚本按 `client_token` 表**当前值**内嵌 Token（写入目标机 `local_config.json`，首启免引导；Token 重置后新执行的安装自动跟随）。脚本行为：结束旧进程 → 下载安装包 → 解压到安装目录 → 写连接配置 → 启动客户端（开机自启由客户端按 `local_config.autostart` 自行注册）。
+- 描述：返回 PowerShell 一键安装脚本文本。`embed_config=1` 时脚本按 `client_token` 表**当前值**内嵌 Token（写入目标机 `local_config.json`，首启免引导；Token 重置后新执行的安装自动跟随）。脚本行为：结束旧进程 → 下载安装包 → 解压到安装目录 → 写连接配置 → 在当前用户桌面创建 HomeworkTime 快捷方式（失败仅告警不阻断）→ 启动客户端（开机自启由客户端按 `local_config.autostart` 自行注册）。
 - 响应：`200`，`Content-Type: text/plain; charset=utf-8`，`Cache-Control: no-store`；`404`（纯文本）不存在或已停用。
 
 ### 5.2 `GET /api/install/s/:slug/package`

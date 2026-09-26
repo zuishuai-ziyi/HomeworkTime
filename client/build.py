@@ -2,8 +2,9 @@
 """HomeworkTime 客户端打包脚本（PyInstaller，onedir）。
 
 用法（在 client/ 目录下）：
-    python build.py          # 直接运行
-    build.bat                # Windows 双击
+    python build.py                  # 直接运行
+    python build.py --icon <ico路径>  # 指定 exe 图标（覆盖默认）
+    build.bat                        # Windows 双击
 
 流程：
 1. 检查 local_config.preset.json 是否填写 server_base_url / client_token：
@@ -12,7 +13,9 @@
    缺失时打印安装指引（不自动安装）；
 3. 以 client/ 为工作目录调用 PyInstaller 打包：
    onedir（启动快、希沃一体机友好）、noconsole、add-data 打包
-   resources/ 与 local_config.preset.json；
+   resources/ 与 local_config.preset.json；exe 图标默认取
+   resources/icons/app.ico（存在即用，--icon 参数可覆盖，无图标文件
+   时跳过图标参数，不阻断打包）；
 4. 打包完成后自动产出全量更新包 dist/HomeworkTime_<版本>.zip：
    zip 根级为应用文件（HomeworkTime.exe、_internal/ 等）+
    update_manifest.json（版本清单，客户端更新成功判定的依据），
@@ -36,10 +39,52 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PRESET_PATH = os.path.join(_SCRIPT_DIR, "local_config.preset.json")
 # 产物目录
 DIST_DIR = os.path.join(_SCRIPT_DIR, "dist", "HomeworkTime")
+# 默认 exe 图标（铃铛图标渲染产物，PNG 压缩单像面 ico）
+DEFAULT_ICON_PATH = os.path.join(_SCRIPT_DIR, "resources", "icons", "app.ico")
 
 # 允许从任意目录运行时 import app.version（读取 APP_VERSION）
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
+
+
+def _parse_args(argv: list) -> dict:
+    """解析命令行参数（仅 --icon <路径>；未知参数报错退出）。"""
+    opts: dict = {"icon": None}
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--icon":
+            if i + 1 >= len(argv):
+                print("[错误] --icon 需要一个 .ico 文件路径参数。")
+                raise SystemExit(1)
+            opts["icon"] = argv[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--icon="):
+            opts["icon"] = arg.split("=", 1)[1]
+            i += 1
+            continue
+        print("[错误] 未知参数: %s（仅支持 --icon <ico路径>）" % arg)
+        raise SystemExit(1)
+    return opts
+
+
+def _resolve_icon(cli_icon: str | None) -> str:
+    """解析 exe 图标路径：CLI 指定优先，缺省用内置 app.ico；均无返回空串。
+
+    CLI 指定但文件缺失 / 非 .ico → 视为错误（退出），避免静默打出无图标产物；
+    默认图标缺失仅提示并跳过（图标非打包必需项）。
+    """
+    if cli_icon:
+        path = os.path.abspath(cli_icon)
+        if not os.path.exists(path) or not path.lower().endswith(".ico"):
+            print("[错误] --icon 指定的文件不存在或不是 .ico：%s" % path)
+            raise SystemExit(1)
+        return path
+    if os.path.exists(DEFAULT_ICON_PATH):
+        return DEFAULT_ICON_PATH
+    print("[信息] 未找到默认图标 %s，本次打包不带 exe 图标。" % DEFAULT_ICON_PATH)
+    return ""
 
 
 def _sep() -> str:
@@ -121,6 +166,9 @@ def _make_update_zip() -> str:
 
 
 def main() -> int:
+    opts = _parse_args(sys.argv[1:])
+    icon_path = _resolve_icon(opts["icon"])
+
     preset = _load_preset()
     url = (str(preset.get("server_base_url") or "")).strip()
     token = (str(preset.get("client_token") or "")).strip()
@@ -131,6 +179,7 @@ def main() -> int:
     print(" 打包预设 : %s" % PRESET_PATH)
     print("   server_base_url = %s" % (url or "(未填写)"))
     print("   client_token    = %s" % (("***%s" % token[-4:]) if token else "(未填写)"))
+    print(" exe 图标 : %s" % (icon_path or "(无)"))
 
     if not url or not token:
         print()
@@ -155,6 +204,10 @@ def main() -> int:
         "--noconsole",
         "--name", "HomeworkTime",
         "--onedir",
+    ]
+    if icon_path:
+        cmd += ["--icon", icon_path]
+    cmd += [
         # 资源（音频/图标）→ _MEIPASS/resources
         "--add-data", "resources%sresources" % sep,
         # 内置默认业务配置 → _MEIPASS/app/default_config.json

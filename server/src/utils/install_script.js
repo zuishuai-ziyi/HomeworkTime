@@ -152,7 +152,9 @@ function buildShortCommand(shortUrl) {
  *   4) embedConfig 时在 exe 同级写入 local_config.json
  *      （server_base_url + 当前 client_token + autostart，免首次运行引导；
  *      注册表自启动由客户端启动时按 local_config.autostart 自行写入）；
- *   5) 启动 HomeworkTime.exe。
+ *   5) 在当前用户桌面创建 HomeworkTime 快捷方式（非致命：失败仅告警，
+ *      不阻断安装）；
+ *   6) 启动 HomeworkTime.exe。
  *
  * @param {object} opts
  * @param {string} opts.slug            安装入口 slug
@@ -182,20 +184,20 @@ function buildInstallScript(opts) {
     `$Dir    = '${psSingleQuoted(dir)}'   # install dir`,
     `$PkgUrl = "$Base/api/install/s/$Slug/package"`,
     ``,
-    `Write-Host '[1/5] Stopping running HomeworkTime (if any)...'`,
+    `Write-Host '[1/6] Stopping running HomeworkTime (if any)...'`,
     `Get-Process -Name 'HomeworkTime' -ErrorAction SilentlyContinue | Stop-Process -Force`,
     `Start-Sleep -Milliseconds 500`,
     ``,
-    `Write-Host '[2/5] Downloading install package...'`,
+    `Write-Host '[2/6] Downloading install package...'`,
     `$Zip = Join-Path $env:TEMP ('ht_install_' + [guid]::NewGuid().ToString('N') + '.zip')`,
     `Invoke-WebRequest -UseBasicParsing -Uri $PkgUrl -OutFile $Zip`,
     ``,
-    `Write-Host ('[3/5] Extracting to ' + $Dir + ' ...')`,
+    `Write-Host ('[3/6] Extracting to ' + $Dir + ' ...')`,
     `New-Item -ItemType Directory -Force -Path $Dir | Out-Null`,
     `Expand-Archive -Path $Zip -DestinationPath $Dir -Force`,
     `Remove-Item -Path $Zip -Force`,
     ``,
-    `Write-Host '[4/5] Locating application...'`,
+    `Write-Host '[4/6] Locating application...'`,
     `$Exe = Join-Path $Dir 'HomeworkTime.exe'`,
     `if (-not (Test-Path -LiteralPath $Exe)) {`,
     `  $Hit = Get-ChildItem -Path $Dir -Recurse -Filter 'HomeworkTime.exe' -File | Select-Object -First 1`,
@@ -238,7 +240,21 @@ function buildInstallScript(opts) {
   }
 
   lines.push(
-    `Write-Host '[5/5] Starting HomeworkTime...'`,
+    `Write-Host '[5/6] Creating desktop shortcut...'`,
+    `try {`,
+    `  $Desktop = [Environment]::GetFolderPath('Desktop')`,
+    `  $LnkPath = Join-Path $Desktop 'HomeworkTime.lnk'`,
+    `  $Ws = New-Object -ComObject WScript.Shell`,
+    `  $Lnk = $Ws.CreateShortcut($LnkPath)`,
+    `  $Lnk.TargetPath = $Exe`,
+    `  $Lnk.WorkingDirectory = $AppDir`,
+    `  $Lnk.Description = 'HomeworkTime'`,
+    `  $Lnk.Save()`,
+    `} catch {`,
+    `  Write-Host ('Warning: failed to create desktop shortcut: ' + $_.Exception.Message)`,
+    `}`,
+    ``,
+    `Write-Host '[6/6] Starting HomeworkTime...'`,
     `Start-Process -FilePath $Exe -WorkingDirectory $AppDir`,
     `Write-Host 'HomeworkTime installed successfully.'`
   );
