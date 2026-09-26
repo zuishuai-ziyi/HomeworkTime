@@ -79,6 +79,13 @@ export const updateEffectiveTime = (effectiveTime) =>
 // ===================== 一键安装 =====================
 /** GET /api/installs -> { total, items }（items 含派生 script_url / command） */
 export const getInstalls = () => http.get('/installs')
+/** GET /api/installs/sink-settings -> { sink_url, api_key_set, api_key_masked, updated_at }（Key 仅脱敏回传） */
+export const getSinkSettings = () => http.get('/installs/sink-settings')
+/**
+ * PUT /api/installs/sink-settings { sink_url, api_key? }
+ * 保存 Sink 短链服务配置；api_key 留空 = 保持已保存 Key 不变
+ */
+export const saveSinkSettings = (data) => http.put('/installs/sink-settings', data)
 /**
  * POST /api/installs（multipart：file + version/notes/install_dir/client_base_url/embed_config）
  * 上传客户端 zip 并创建一键安装入口（生成随机 slug）。安装包较大，单独放宽超时（最长 10 分钟）。
@@ -99,8 +106,9 @@ export const updateInstall = (id, data) => http.patch(`/installs/${id}`, data)
 /** DELETE /api/installs/:id -> { ok } */
 export const deleteInstall = (id) => http.delete(`/installs/${id}`)
 /**
- * POST /api/installs/:id/shortlink { sink_url, sink_api_key, slug? }
+ * POST /api/installs/:id/shortlink { sink_url?, sink_api_key?, slug? }
  * 调 Sink /api/link/upsert 生成短链 -> { short_url, command, status }
+ * sink_url / sink_api_key 缺省时服务端回退到已保存的 sink_settings 配置
  */
 export const createInstallShortlink = (id, data) =>
   http.post(`/installs/${id}/shortlink`, data, { timeout: 30000 })

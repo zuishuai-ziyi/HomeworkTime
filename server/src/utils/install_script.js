@@ -101,6 +101,19 @@ function psSingleQuoted(value) {
 }
 
 /**
+ * Sink API Key 脱敏展示：长度 > 8 时保留前 4 位与后 4 位，中间以 *** 代替；
+ * 1-8 位整体打码为 ****，空串原样返回。用于管理接口回传已保存 Key 的提示。
+ * @param {string} key
+ * @returns {string}
+ */
+function maskApiKey(key) {
+  const k = String(key || '');
+  if (!k) return '';
+  if (k.length <= 8) return '****';
+  return `${k.slice(0, 4)}***${k.slice(-4)}`;
+}
+
+/**
  * 拼接脚本下载 URL（长命令与 Sink 短链的跳转目标）。
  * @param {string} clientBaseUrl 已归一化的目标机可达服务器地址
  * @param {string} slug 安装入口 slug
@@ -242,6 +255,7 @@ module.exports = {
   isValidSlug,
   isValidSinkSlug,
   parseSinkUrl,
+  maskApiKey,
   buildScriptUrl,
   buildInstallCommand,
   buildShortCommand,

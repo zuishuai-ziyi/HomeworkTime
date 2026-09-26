@@ -171,7 +171,24 @@ CREATE TABLE `install_packages` (
   COMMENT='一键安装包 (多行, 每行一个安装入口)';
 
 -- ----------------------------------------------------------------------------
--- 8) audit_logs: 操作日志
+-- 8) sink_settings: Sink 短链服务配置 (单行; id 固定 = 1)
+--    保存一键安装「生成短链」所用的自托管 Sink 服务地址与 API Key,
+--    管理端所有浏览器共享,生成短链时免手工输入;api_key 明文存储
+--    (与 client_token 同理),管理接口只回传脱敏形式,审计不记录 Key 值
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `sink_settings`;
+CREATE TABLE `sink_settings` (
+  `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `sink_url`   VARCHAR(255) NULL                    COMMENT 'Sink 服务地址 (http(s)://host[:port],hostname 即短链域名)',
+  `api_key`    VARCHAR(255) NULL                    COMMENT 'Sink Bearer 令牌 (NUXT_SITE_TOKEN 或 sk_ 开头 API Key, 明文)',
+  `updated_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `updated_by` INT UNSIGNED NULL                    COMMENT '最近一次修改者 user.id',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Sink 短链服务配置 (单行)';
+
+-- ----------------------------------------------------------------------------
+-- 9) audit_logs: 操作日志
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `audit_logs`;
 CREATE TABLE `audit_logs` (
@@ -248,3 +265,7 @@ INSERT INTO `client_token` (`id`, `token`) VALUES
 INSERT INTO `audio_files` (`filename`, `stored_path`, `size`, `sha256`, `is_builtin`) VALUES
   ('near.wav', NULL, NULL, NULL, 1),
   ('end.wav',  NULL, NULL, NULL, 1);
+
+-- Sink 短链服务配置初始空行 (单行, id 固定 = 1)
+-- 服务地址与 API Key 由管理端「一键安装 → 短链服务设置」填写保存。
+INSERT INTO `sink_settings` (`id`) VALUES (1);

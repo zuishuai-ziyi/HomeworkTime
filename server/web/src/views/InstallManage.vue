@@ -2,6 +2,10 @@
   <div class="page-card">
     <div class="toolbar">
       <span class="toolbar-title">一键安装（PowerShell 命令分发）</span>
+      <el-button link type="primary" @click="openSinkSettings">
+        <el-icon style="margin-right: 4px"><Setting /></el-icon>
+        短链服务设置
+      </el-button>
     </div>
 
     <el-alert
@@ -178,7 +182,7 @@
           type="info"
           :closable="false"
           show-icon
-          title="通过自托管 Sink 短链服务把脚本地址缩短为短链，方便口头转达或手工敲入。API Key 仅用于本次请求，不保存在服务器。"
+          title="通过自托管 Sink 短链服务把脚本地址缩短为短链，方便口头转达或手工敲入。可勾选「保存到服务器」记住服务地址与 API Key，下次免输入（Key 仅脱敏回显，不会展示明文）。"
         />
         <el-form label-width="110px">
           <el-form-item label="Sink 服务地址">
@@ -193,7 +197,7 @@
               v-model="sinkForm.apiKey"
               type="password"
               show-password
-              placeholder="Sink 后台令牌（NUXT_SITE_TOKEN 或 sk_ 开头的 API Key）"
+              :placeholder="apiKeyPlaceholder"
             />
           </el-form-item>
           <el-form-item label="自定义 slug">
@@ -204,7 +208,7 @@
             />
           </el-form-item>
           <el-form-item label="">
-            <el-checkbox v-model="sinkForm.remember">记住到本机（仅保存在当前浏览器）</el-checkbox>
+            <el-checkbox v-model="sinkForm.save">保存到服务器（所有管理员共享，下次免输入）</el-checkbox>
           </el-form-item>
         </el-form>
         <div style="text-align: right">
@@ -244,13 +248,62 @@
         </template>
       </template>
     </el-dialog>
+
+    <!-- Sink 短链服务设置对话框 -->
+    <el-dialog v-model="sinkSettingsVisible" title="Sink 短链服务设置" width="560px" :close-on-click-modal="false">
+      <el-alert
+        class="block"
+        type="info"
+        :closable="false"
+        show-icon
+        title="保存后生成短链时自动使用该配置，所有管理端浏览器共享；API Key 加密保存于服务器数据库，页面仅脱敏回显。"
+      />
+      <el-descriptions :column="1" border size="small" class="block">
+        <el-descriptions-item label="已保存 Key">
+          <span v-if="sinkSaved.hasKey" class="mono">{{ sinkSaved.masked }}</span>
+          <el-tag v-else type="info">未保存</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="更新时间">{{ sinkSaved.updatedAt || '—' }}</el-descriptions-item>
+      </el-descriptions>
+      <el-form label-width="110px">
+        <el-form-item label="Sink 服务地址">
+          <el-input
+            v-model="sinkSettingsForm.url"
+            placeholder="https://s.example.com"
+            maxlength="240"
+          />
+        </el-form-item>
+        <el-form-item label="API Key">
+          <el-input
+            v-model="sinkSettingsForm.apiKey"
+            type="password"
+            show-password
+            :placeholder="sinkSaved.hasKey ? '留空保持已保存 Key 不变' : 'Sink 后台令牌（NUXT_SITE_TOKEN 或 sk_ 开头的 API Key）'"
+          />
+        </el-form-item>
+      </el-form>
+      <div style="text-align: right">
+        <el-button type="primary" :loading="sinkSettingsSaving" @click="submitSinkSettings">
+          <el-icon style="margin-right: 4px"><Check /></el-icon>
+          保存配置
+        </el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getInstalls, createInstall, updateInstall, deleteInstall, createInstallShortlink } from '../api'
+import {
+  getInstalls,
+  createInstall,
+  updateInstall,
+  deleteInstall,
+  createInstallShortlink,
+  getSinkSettings,
+  saveSinkSettings
+} from '../api'
 
 const items = ref([])
 const loading = ref(false)
@@ -273,16 +326,39 @@ const shortlinkVisible = ref(false)
 const shortlinkRow = ref(null)
 const shortlinkSubmitting = ref(false)
 const shortlinkResult = ref(null)
-const sinkForm = reactive({ url: '', apiKey: '', slug: '', remember: true })
+const sinkForm = reactive({ url: '', apiKey: '', slug: '', save: true })
 
-const SINK_URL_KEY = 'ht_sink_url'
-const SINK_KEY_KEY = 'ht_sink_api_key'
+/** 服务端已保存的 Sink 配置（Key 仅脱敏回显） */
+const sinkSaved = reactive({ url: '', hasKey: false, masked: '', updatedAt: '' })
+
+/** 未保存 Key 时必填，已保存时可留空沿用 */
+const apiKeyPlaceholder = computed(() =>
+  sinkSaved.hasKey
+    ? `留空使用已保存的 Key（${sinkSaved.masked}）`
+    : 'Sink 后台令牌（NUXT_SITE_TOKEN 或 sk_ 开头的 API Key）'
+)
+
+const sinkSettingsVisible = ref(false)
+const sinkSettingsSaving = ref(false)
+const sinkSettingsForm = reactive({ url: '', apiKey: '' })
 
 const canSubmit = computed(() => {
   return !!form.file &&
     /^[A-Za-z]:\\[^'"]{1,240}$/.test(form.installDir.trim()) &&
     /^https?:\/\/[^\s'"]+$/.test(form.clientBaseUrl.trim())
 })
+
+async function loadSinkSettings() {
+  try {
+    const { data } = await getSinkSettings()
+    sinkSaved.url = data.sink_url || ''
+    sinkSaved.hasKey = !!data.api_key_set
+    sinkSaved.masked = data.api_key_masked || ''
+    sinkSaved.updatedAt = data.updated_at || ''
+  } catch (err) {
+    // 配置读取失败不阻塞短链功能（仍可每次手工输入）
+  }
+}
 
 async function loadList() {
   loading.value = true
@@ -356,36 +432,80 @@ function openCommand(row) {
   commandVisible.value = true
 }
 
+/** 打开 Sink 短链服务设置对话框（回填已保存的服务地址） */
+function openSinkSettings() {
+  sinkSettingsForm.url = sinkSaved.url
+  sinkSettingsForm.apiKey = ''
+  sinkSettingsVisible.value = true
+}
+
+/** 保存 Sink 配置到服务器（Key 留空 = 保持已保存 Key 不变） */
+async function submitSinkSettings() {
+  if (!sinkSettingsForm.url.trim()) {
+    ElMessage.error('请填写 Sink 服务地址')
+    return
+  }
+  if (!sinkSaved.hasKey && !sinkSettingsForm.apiKey.trim()) {
+    ElMessage.error('首次保存请填写 API Key')
+    return
+  }
+  sinkSettingsSaving.value = true
+  try {
+    const { data } = await saveSinkSettings({
+      sink_url: sinkSettingsForm.url.trim(),
+      api_key: sinkSettingsForm.apiKey.trim()
+    })
+    sinkSaved.url = data.sink_url || ''
+    sinkSaved.hasKey = !!data.api_key_set
+    sinkSaved.masked = data.api_key_masked || ''
+    sinkSaved.updatedAt = data.updated_at || ''
+    ElMessage.success('短链服务配置已保存')
+    sinkSettingsVisible.value = false
+  } catch (err) {
+    ElMessage.error(err.response?.data?.error || '保存失败')
+  } finally {
+    sinkSettingsSaving.value = false
+  }
+}
+
 function openShortlink(row) {
   shortlinkRow.value = row
   shortlinkResult.value = null
-  if (!sinkForm.url) sinkForm.url = localStorage.getItem(SINK_URL_KEY) || ''
-  if (!sinkForm.apiKey) sinkForm.apiKey = localStorage.getItem(SINK_KEY_KEY) || ''
+  sinkForm.slug = ''
+  sinkForm.apiKey = ''
+  // 预填服务端已保存的服务地址（没有则留空待填）
+  sinkForm.url = sinkSaved.url
   shortlinkVisible.value = true
 }
 
 async function submitShortlink() {
-  if (!sinkForm.url.trim()) {
+  const url = sinkForm.url.trim()
+  const apiKey = sinkForm.apiKey.trim()
+  if (!url) {
     ElMessage.error('请填写 Sink 服务地址')
     return
   }
-  if (!sinkForm.apiKey.trim()) {
-    ElMessage.error('请填写 API Key')
+  if (!apiKey && !sinkSaved.hasKey) {
+    ElMessage.error('请填写 API Key（首次使用必填，或先在「短链服务设置」中保存）')
     return
   }
   shortlinkSubmitting.value = true
   try {
+    if (sinkForm.save) {
+      // 先落库（Key 留空 = 保持已保存 Key），失败则中止本次生成
+      const { data: saved } = await saveSinkSettings({ sink_url: url, api_key: apiKey })
+      sinkSaved.url = saved.sink_url || ''
+      sinkSaved.hasKey = !!saved.api_key_set
+      sinkSaved.masked = saved.api_key_masked || ''
+      sinkSaved.updatedAt = saved.updated_at || ''
+    }
     const { data } = await createInstallShortlink(shortlinkRow.value.id, {
-      sink_url: sinkForm.url.trim(),
-      sink_api_key: sinkForm.apiKey.trim(),
+      sink_url: url,
+      sink_api_key: apiKey,
       slug: sinkForm.slug.trim()
     })
     shortlinkResult.value = data
     ElMessage.success(data.status === 'existing' ? '短链已存在，直接复用' : '短链创建成功')
-    if (sinkForm.remember) {
-      localStorage.setItem(SINK_URL_KEY, sinkForm.url.trim())
-      localStorage.setItem(SINK_KEY_KEY, sinkForm.apiKey.trim())
-    }
   } catch (err) {
     ElMessage.error(err.response?.data?.error || '短链生成失败')
   } finally {
@@ -454,7 +574,10 @@ function formatSize(bytes) {
   return `${(n / 1024 / 1024).toFixed(2)} MB`
 }
 
-onMounted(loadList)
+onMounted(() => {
+  loadList()
+  loadSinkSettings()
+})
 </script>
 
 <style scoped>

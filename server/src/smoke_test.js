@@ -14,6 +14,7 @@ const {
   isValidSlug,
   isValidSinkSlug,
   parseSinkUrl,
+  maskApiKey,
   buildScriptUrl,
   buildInstallCommand,
   buildInstallScript
@@ -269,6 +270,15 @@ check('parseSinkUrl：提取 origin 与 hostname（domain 不含端口）', () =
   assert.strictEqual(r.hostname, 's.example.com');
   assert.throws(() => parseSinkUrl('not-a-url'), /非法/);
   assert.throws(() => parseSinkUrl('ftp://s.example.com'), /非法/);
+});
+
+check('maskApiKey：脱敏展示（保留前后 4 位，短 Key 整体打码）', () => {
+  assert.strictEqual(maskApiKey('sk_abcdefghijklmnop'), 'sk_a***mnop');
+  assert.strictEqual(maskApiKey('NUXT_SITE_TOKEN_VALUE'), 'NUXT***ALUE');
+  assert.strictEqual(maskApiKey('short'), '****');
+  assert.strictEqual(maskApiKey('12345678'), '****');
+  assert.strictEqual(maskApiKey(''), '');
+  assert.strictEqual(maskApiKey(null), '');
 });
 
 check('buildInstallCommand：生成 irm | iex 单行命令', () => {

@@ -9,9 +9,15 @@
  *   PATCH  /api/installs/:id             body { version?, notes?, install_dir?,
  *                                        client_base_url?, embed_config?, enabled? }
  *   DELETE /api/installs/:id             -> 删除记录与物理文件
- *   POST   /api/installs/:id/shortlink   body { sink_url, sink_api_key, slug? }
+ *   POST   /api/installs/:id/shortlink   body { sink_url?, sink_api_key?, slug? }
  *                                        -> 调 Sink /api/link/upsert 生成短链，
- *                                           返回 { short_url, command }（API Key 不落库不审计）
+ *                                           返回 { short_url, command }
+ *                                           （地址/Key 缺省时回退 sink_settings 已保存配置）
+ *   GET    /api/installs/sink-settings   -> 已保存 Sink 配置（Key 仅回传脱敏形式）
+ *                                           { sink_url, api_key_set, api_key_masked, updated_at }
+ *   PUT    /api/installs/sink-settings   body { sink_url, api_key? }
+ *                                        -> 保存 Sink 配置（api_key 留空 = 保持已保存 Key），
+ *                                           写审计 install.sink.save（不记录 Key 值）
  *
  * 公开接口（挂载于 /api/install，无登录态，随机 slug 即访问凭据）：
  *   GET /api/install/s/:slug          -> PowerShell 安装脚本文本（text/plain）
@@ -34,6 +40,7 @@ const {
   isValidSlug,
   isValidSinkSlug,
   parseSinkUrl,
+  maskApiKey,
   buildScriptUrl,
   buildInstallCommand,
   buildInstallScript
@@ -94,6 +101,32 @@ function parseBoolField(value, fallback) {
   if (['1', 'true', 'yes', 'on'].includes(v)) return true;
   if (['0', 'false', 'no', 'off'].includes(v)) return false;
   return fallback;
+}
+
+/** Sink API Key 白名单：1-255 位，不含空白与控制字符（Bearer 令牌原样发送） */
+function isValidSinkApiKey(key) {
+  const k = String(key || '');
+  return k.length >= 1 && k.length <= 255 && !/[\s\x00-\x1f]/.test(k);
+}
+
+/** 读取已保存的 Sink 配置单行（无行/未保存返回空对象） */
+async function getSinkSettingsRow() {
+  try {
+    const rows = await query('SELECT sink_url, api_key, updated_at FROM sink_settings WHERE id = 1');
+    return rows[0] || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/** sink_settings 行 → 对外响应（Key 只回传脱敏形式，不回传明文） */
+function toSinkSettingsItem(row) {
+  return {
+    sink_url: row.sink_url || '',
+    api_key_set: !!row.api_key,
+    api_key_masked: row.api_key ? maskApiKey(row.api_key) : '',
+    updated_at: row.updated_at || null
+  };
 }
 
 /** 行数据 → 对外 item（剥离 stored_path；派生 script_url 与长命令） */
@@ -273,6 +306,62 @@ adminRouter.get('/', async (req, res, next) => {
   }
 });
 
+// GET /api/installs/sink-settings（查看已保存 Sink 配置，Key 仅脱敏回传）
+adminRouter.get('/sink-settings', async (req, res, next) => {
+  try {
+    res.json(toSinkSettingsItem(await getSinkSettingsRow()));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/installs/sink-settings（保存 Sink 配置；api_key 留空 = 保持已保存 Key）
+adminRouter.put('/sink-settings', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const sinkUrl = String(body.sink_url || '').trim();
+    if (!sinkUrl) {
+      return res.status(400).json({ error: '缺少 Sink 服务地址（sink_url）' });
+    }
+    let sink;
+    try {
+      sink = parseSinkUrl(sinkUrl);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+    const apiKey = String(body.api_key || '').trim();
+    if (apiKey && !isValidSinkApiKey(apiKey)) {
+      return res.status(400).json({ error: 'API Key 非法（1-255 位，不含空白与控制字符）' });
+    }
+
+    // 单行表 UPSERT 兜底；api_key 留空时只更新地址（保留已保存 Key）
+    if (apiKey) {
+      await pool.execute(
+        `INSERT INTO sink_settings (id, sink_url, api_key, updated_by) VALUES (1, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE sink_url = VALUES(sink_url), api_key = VALUES(api_key),
+           updated_by = VALUES(updated_by)`,
+        [sinkUrl, apiKey, req.user.id]
+      );
+    } else {
+      await pool.execute(
+        `INSERT INTO sink_settings (id, sink_url, api_key, updated_by) VALUES (1, ?, NULL, ?)
+         ON DUPLICATE KEY UPDATE sink_url = VALUES(sink_url), updated_by = VALUES(updated_by)`,
+        [sinkUrl, req.user.id]
+      );
+    }
+
+    // 审计只记主机名与是否更换 Key，绝不记录 Key 值
+    await writeAudit(req.user.id, 'install.sink.save', {
+      sink_host: sink.hostname,
+      api_key_changed: !!apiKey
+    });
+
+    res.json(toSinkSettingsItem(await getSinkSettingsRow()));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PATCH /api/installs/:id（部分更新安装配置）
 adminRouter.patch('/:id', async (req, res, next) => {
   try {
@@ -364,11 +453,20 @@ adminRouter.post('/:id/shortlink', async (req, res, next) => {
     }
 
     const body = req.body || {};
-    const sinkUrl = String(body.sink_url || '').trim();
-    const sinkApiKey = String(body.sink_api_key || '').trim();
+    // 地址/Key 未随请求传入时回退到服务端已保存的 Sink 配置（管理端「短链服务设置」）
+    const saved = await getSinkSettingsRow();
+    const sinkUrl = String(body.sink_url || '').trim() || String(saved.sink_url || '').trim();
+    const sinkApiKey = String(body.sink_api_key || '').trim() || String(saved.api_key || '').trim();
+    if (!sinkUrl) {
+      return res.status(400).json({ error: '缺少短链服务地址（sink_url），请填写或先在「短链服务设置」中保存' });
+    }
+    if (!sinkApiKey) {
+      return res.status(400).json({ error: '缺少短链服务 API Key，请填写或先在「短链服务设置」中保存' });
+    }
+    if (!isValidSinkApiKey(sinkApiKey)) {
+      return res.status(400).json({ error: 'API Key 非法（1-255 位，不含空白与控制字符）' });
+    }
     const customSlug = String(body.slug || '').trim();
-    if (!sinkUrl) return res.status(400).json({ error: '缺少短链服务地址（sink_url）' });
-    if (!sinkApiKey) return res.status(400).json({ error: '缺少短链服务 API Key' });
     if (!isValidSinkSlug(customSlug)) {
       return res.status(400).json({ error: '自定义短链 slug 非法（字母数字开头，可含 -，最长 64）' });
     }

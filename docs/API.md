@@ -774,15 +774,17 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 ### 4.24 `POST /api/installs/:id/shortlink`
 
 - 鉴权：`requireAuth`（JWT）
-- 描述：调用自托管 [Sink](https://github.com/zuishuai-ziyi/Sink) 短链服务的 `POST /api/link/upsert`（Bearer 鉴权），把该安装包的脚本地址注册为短链。**API Key 仅本次请求透传，不落库、不写审计**。重复调用同 `slug` 幂等（Sink 返回 `status:"existing"` 直接复用）。
+- 描述：调用自托管 [Sink](https://github.com/zuishuai-ziyi/Sink) 短链服务的 `POST /api/link/upsert`（Bearer 鉴权），把该安装包的脚本地址注册为短链。`sink_url` / `sink_api_key` 未随请求传入时，回退到 `sink_settings` 表已保存配置（见 4.26）。重复调用同 `slug` 幂等（Sink 返回 `status:"existing"` 直接复用）。审计日志 `install.shortlink` 不记录 Key 值。
 
 请求体：
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `sink_url` | string | 是 | Sink 服务地址，如 `https://s.example.com`（hostname 即短链域名，需已在 Sink 注册或为默认域名） |
-| `sink_api_key` | string | 是 | `Authorization: Bearer` 令牌（`NUXT_SITE_TOKEN` 或 `sk_` 开头 API Key） |
+| `sink_url` | string | 否 | Sink 服务地址，如 `https://s.example.com`（hostname 即短链域名，需已在 Sink 注册或为默认域名）；缺省用已保存配置 |
+| `sink_api_key` | string | 否 | `Authorization: Bearer` 令牌（`NUXT_SITE_TOKEN` 或 `sk_` 开头 API Key）；缺省用已保存配置 |
 | `slug` | string | 否 | 自定义短链 slug（`^[A-Za-z0-9][A-Za-z0-9-]{0,63}$`；缺省由 Sink 自动生成） |
+
+> `sink_url` 与 `sink_api_key` 均无（请求未传且服务端未保存）时返回 `400`。
 
 成功响应 `200`：
 
@@ -795,6 +797,40 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 ```
 
 错误响应：`400` 参数缺失/非法或安装入口已停用；`502` 短链服务连接失败 / 鉴权失败（401/403 归一）/ 存储未就绪（423）/ 域名未注册或 slug 冲突（400 透传）。
+
+### 4.25 `GET /api/installs/sink-settings`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：查看已保存的 Sink 短链服务配置（单行表 `sink_settings`）。**API Key 只回传脱敏形式，不回传明文**。
+
+成功响应 `200`：
+
+```json
+{
+  "sink_url": "https://s.example.com",
+  "api_key_set": true,
+  "api_key_masked": "sk_a***mnop",
+  "updated_at": "2026-09-26 10:00:00"
+}
+```
+
+未保存过时 `sink_url` 为空串、`api_key_set` 为 `false`、`api_key_masked` 为空串。
+
+### 4.26 `PUT /api/installs/sink-settings`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：保存 Sink 短链服务配置，供 `POST /api/installs/:id/shortlink` 回退使用（所有管理端共享）。写审计日志 `install.sink.save`（只记主机名与是否更换 Key，**不记录 Key 值**）。
+
+请求体：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `sink_url` | string | 是 | Sink 服务地址，完整 http(s) URL |
+| `api_key` | string | 否 | Bearer 令牌（1-255 位，不含空白与控制字符）；**留空 = 保持已保存 Key 不变**（仅更新服务地址） |
+
+成功响应 `200`：同 4.25 响应结构（保存后的最新配置）。
+
+错误响应：`400` `sink_url` 缺失/非法，或 `api_key` 非法。
 
 ---
 
