@@ -138,7 +138,40 @@ CREATE TABLE `client_update` (
   COMMENT='客户端全量更新包 (单行, 仅保留最新)';
 
 -- ----------------------------------------------------------------------------
--- 7) audit_logs: 操作日志
+-- 7) install_packages: 一键安装包 (多行, 每行一个独立安装入口)
+--    管理端上传客户端 zip (PyInstaller onedir 整目录压缩, 与更新包同构),
+--    服务端按行生成 PowerShell 一键安装脚本:
+--      GET /api/install/s/:slug          -> 安装脚本 (文本, slug 即下载凭据)
+--      GET /api/install/s/:slug/package  -> 安装包 zip 二进制流
+--    slug 随机不可猜, 即公开接口的访问凭据; enabled=0 时两个接口均返回 404。
+--    embed_config=1 时脚本按当前 client_token 表值写入 local_config.json
+--    (免首次运行引导); client_base_url 为目标机可达的服务器地址。
+-- ----------------------------------------------------------------------------
+DROP TABLE IF EXISTS `install_packages`;
+CREATE TABLE `install_packages` (
+  `id`              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `slug`            CHAR(16)     NOT NULL                COMMENT '随机不可猜标识 (脚本/安装包下载 URL 的唯一凭据)',
+  `version`         VARCHAR(32)  NULL                    COMMENT '版本号 (可选, 从文件名带出)',
+  `notes`           VARCHAR(500) NULL                    COMMENT '备注',
+  `filename`        VARCHAR(255) NOT NULL                COMMENT '原始 zip 文件名',
+  `stored_path`     VARCHAR(255) NOT NULL                COMMENT '安装包相对服务端根路径',
+  `size`            BIGINT UNSIGNED NOT NULL             COMMENT 'zip 字节数',
+  `sha256`          CHAR(64)     NOT NULL                COMMENT 'zip 十六进制 sha256',
+  `install_dir`     VARCHAR(255) NOT NULL                COMMENT '目标机安装目录 (写入安装脚本, 如 C:\\HomeworkTime)',
+  `client_base_url` VARCHAR(255) NOT NULL                COMMENT '目标机可达的服务器地址 (写入脚本与 local_config.json)',
+  `embed_config`    TINYINT(1)   NOT NULL DEFAULT 1     COMMENT '1=脚本写入 local_config.json (免引导), 0=不写 (首启弹引导)',
+  `enabled`         TINYINT(1)   NOT NULL DEFAULT 1     COMMENT '0=停用 (脚本/包接口返回 404)',
+  `download_count`  INT UNSIGNED NOT NULL DEFAULT 0     COMMENT '安装包被下载次数',
+  `created_by`      INT UNSIGNED NULL                    COMMENT '创建人 user.id',
+  `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_install_packages_slug` (`slug`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='一键安装包 (多行, 每行一个安装入口)';
+
+-- ----------------------------------------------------------------------------
+-- 8) audit_logs: 操作日志
 -- ----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `audit_logs`;
 CREATE TABLE `audit_logs` (

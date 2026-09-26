@@ -1,12 +1,23 @@
 /**
- * smoke_test.js — validate.js 纯函数冒烟测试（不依赖数据库）
+ * smoke_test.js — 服务端纯函数冒烟测试（不依赖数据库）
  *
+ * 覆盖：validateAndMerge（业务配置校验器）+ install_script（一键安装脚本生成器）
  * 运行: node src/smoke_test.js
  * 退出码: 0 全部通过；1 存在失败
  */
 const assert = require('assert');
 const { validateAndMerge } = require('./utils/validate');
 const defaultsRaw = require('./default_config.json');
+const {
+  normalizeClientBaseUrl,
+  normalizeInstallDir,
+  isValidSlug,
+  isValidSinkSlug,
+  parseSinkUrl,
+  buildScriptUrl,
+  buildInstallCommand,
+  buildInstallScript
+} = require('./utils/install_script');
 
 function clone(x) {
   return JSON.parse(JSON.stringify(x));
@@ -214,6 +225,118 @@ check('非对象输入被拒绝', () => {
   assert.strictEqual(r.ok, false);
   const r2 = validateAndMerge([1, 2, 3]);
   assert.strictEqual(r2.ok, false);
+});
+
+console.log('');
+console.log('== install_script 一键安装脚本冒烟测试 ==');
+
+check('normalizeClientBaseUrl：归一化去除末尾斜杠', () => {
+  assert.strictEqual(normalizeClientBaseUrl('http://hw.school.xiaoziyi.com:81/'), 'http://hw.school.xiaoziyi.com:81');
+  assert.strictEqual(normalizeClientBaseUrl('https://example.com/a/'), 'https://example.com/a');
+});
+
+check('normalizeClientBaseUrl：非 http(s)、含空白/引号被拒绝', () => {
+  assert.throws(() => normalizeClientBaseUrl('ftp://example.com'), /http/);
+  assert.throws(() => normalizeClientBaseUrl('http://exa mple.com'), /非法/);
+  assert.throws(() => normalizeClientBaseUrl("http://example.com/'"), /非法/);
+  assert.throws(() => normalizeClientBaseUrl(''), /非法/);
+});
+
+check('normalizeInstallDir：合法 Windows 路径通过并去除末尾反斜杠', () => {
+  assert.strictEqual(normalizeInstallDir('C:\\HomeworkTime'), 'C:\\HomeworkTime');
+  assert.throws(() => normalizeInstallDir('C:\\HomeworkTime\\'), /结尾/);
+});
+
+check('normalizeInstallDir：相对路径 / 含引号被拒绝', () => {
+  assert.throws(() => normalizeInstallDir('HomeworkTime'), /绝对路径/);
+  assert.throws(() => normalizeInstallDir("C:\\Ho'me"), /非法/);
+  assert.throws(() => normalizeInstallDir('C:\\'), /绝对路径/);
+});
+
+check('isValidSlug / isValidSinkSlug 白名单', () => {
+  assert.ok(isValidSlug('AbCdEf1234567890'));
+  assert.ok(!isValidSlug('short'));
+  assert.ok(!isValidSlug('含中文的slug12345'));
+  assert.ok(isValidSinkSlug(''));
+  assert.ok(isValidSinkSlug('ht-install'));
+  assert.ok(!isValidSinkSlug('-abc'));
+  assert.ok(!isValidSinkSlug('a b'));
+});
+
+check('parseSinkUrl：提取 origin 与 hostname（domain 不含端口）', () => {
+  const r = parseSinkUrl('https://s.example.com:8443/');
+  assert.strictEqual(r.origin, 'https://s.example.com:8443');
+  assert.strictEqual(r.hostname, 's.example.com');
+  assert.throws(() => parseSinkUrl('not-a-url'), /非法/);
+  assert.throws(() => parseSinkUrl('ftp://s.example.com'), /非法/);
+});
+
+check('buildInstallCommand：生成 irm | iex 单行命令', () => {
+  const cmd = buildInstallCommand('https://s.example.com/htinstall');
+  assert.strictEqual(
+    cmd,
+    "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm 'https://s.example.com/htinstall' | iex\""
+  );
+});
+
+check('buildInstallScript：embedConfig 时包含下载/解压/local_config 关键步骤', () => {
+  const s = buildInstallScript({
+    slug: 'AbCdEf1234567890',
+    clientBaseUrl: 'http://hw.school.xiaoziyi.com:81',
+    installDir: 'C:\\HomeworkTime',
+    embedConfig: true,
+    clientToken: 'tok123'
+  });
+  assert.ok(s.includes('$PkgUrl = "$Base/api/install/s/$Slug/package"'));
+  assert.ok(s.includes("Expand-Archive -Path $Zip -DestinationPath $Dir -Force"));
+  assert.ok(s.includes('"server_base_url": "http://hw.school.xiaoziyi.com:81"'));
+  assert.ok(s.includes('"client_token": "tok123"'));
+  assert.ok(s.includes('"autostart": true'));
+  assert.ok(s.includes('[System.IO.File]::WriteAllText'));
+  assert.ok(s.includes("Start-Process -FilePath $Exe"));
+  assert.ok(!/[\u4e00-\u9fff]/.test(s), '脚本应为纯 ASCII');
+  assert.ok(s.endsWith('\r\n'), '脚本应以 CRLF 结尾');
+  // here-string 终止符必须位于行首
+  assert.ok(/^'@\r$/m.test(s));
+});
+
+check('buildInstallScript：embedConfig=false 时不写入 local_config', () => {
+  const s = buildInstallScript({
+    slug: 'AbCdEf1234567890',
+    clientBaseUrl: 'http://hw.school.example.com',
+    installDir: 'C:\\HomeworkTime',
+    embedConfig: false,
+    clientToken: 'tok123'
+  });
+  assert.ok(!s.includes('client_token'));
+  assert.ok(s.includes('first-run guide window'));
+});
+
+check('buildInstallScript：注入面收敛 —— 非法安装目录在白名单层被拒绝', () => {
+  assert.throws(() => buildInstallScript({
+    slug: 'AbCdEf1234567890',
+    clientBaseUrl: 'http://hw.example.com',
+    installDir: "C:\\It's HT",
+    embedConfig: false,
+    clientToken: null
+  }), /非法/);
+});
+
+check('buildInstallScript：非法参数被拒绝', () => {
+  assert.throws(() => buildInstallScript({
+    slug: 'bad slug',
+    clientBaseUrl: 'http://ok.example.com',
+    installDir: 'C:\\HomeworkTime',
+    embedConfig: true,
+    clientToken: ''
+  }), /slug/);
+  assert.throws(() => buildInstallScript({
+    slug: 'AbCdEf1234567890',
+    clientBaseUrl: 'java script:alert(1)',
+    installDir: 'C:\\HomeworkTime',
+    embedConfig: true,
+    clientToken: ''
+  }), /非法/);
 });
 
 console.log('');

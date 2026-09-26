@@ -25,6 +25,10 @@
           <el-icon><UploadFilled /></el-icon>
           <span>更新管理</span>
         </el-menu-item>
+        <el-menu-item index="/installs">
+          <el-icon><Box /></el-icon>
+          <span>一键安装</span>
+        </el-menu-item>
         <el-menu-item index="/users">
           <el-icon><User /></el-icon>
           <span>用户管理</span>

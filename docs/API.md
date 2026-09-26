@@ -48,6 +48,8 @@
 - 两者都缺失 → 401。
 - **客户端 Token 身份仅能调用 `GET /api/config` 与 `PUT /api/config`**（即只能读 / 写配置），其余管理接口仍要求 JWT。换句话说：`X-Client-Token` 不等于后台管理员权限。
 
+> 另有一类**无请求头鉴权**的公开接口：一键安装的 `/api/install/s/:slug`（见第五章）。其访问凭据是 URL 中 16 位随机 slug 本身（约 95 bit 熵），仅暴露脚本文本与安装包下载，可在管理端随时停用。
+
 ### 1.4 通用约定
 
 - 所有时间字段（`updated_at`、`last_heartbeat`、`created_at` 等）以 `DATETIME` 存储并以**字符串**形式返回（`db.js` 配置 `dateStrings: true`）。
@@ -693,9 +695,133 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 
 错误响应：`400` 生效时间格式非法；`404 尚未发布过更新包`。
 
+### 4.20 `GET /api/installs`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：列出一键安装包（多行表 `install_packages`，按创建时间倒序）。`items` 含按 `client_base_url` 派生的 `script_url` 与长命令 `command`；不含 `stored_path`。
+
+成功响应 `200`：
+
+```json
+{
+  "total": 1,
+  "items": [
+    {
+      "id": 1,
+      "slug": "AbCdEf1234567890",
+      "version": "1.1.0",
+      "notes": "机房批次",
+      "filename": "HomeworkTime_1.1.0.zip",
+      "size": 81510400,
+      "sha256": "3f2a...",
+      "install_dir": "C:\\HomeworkTime",
+      "client_base_url": "http://homeworktime.example.com:81",
+      "embed_config": true,
+      "enabled": true,
+      "download_count": 12,
+      "created_by": "admin",
+      "created_at": "2026-09-26 10:00:00",
+      "script_url": "http://homeworktime.example.com:81/api/install/s/AbCdEf1234567890",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm '<script_url>' | iex\""
+    }
+  ]
+}
+```
+
+### 4.21 `POST /api/installs`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：上传客户端安装包 zip 并创建一键安装入口（生成 16 位随机 slug）。安装包与更新包同构（`client/build.py` 产物可直接复用）。写审计日志 `install.create`。
+- 请求格式：`multipart/form-data`
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `file` | file | 是 | `.zip` 安装包，上限 500MB |
+| `install_dir` | string | 否 | 目标机安装目录（Windows 绝对路径，默认 `C:\HomeworkTime`；禁止引号/控制字符） |
+| `client_base_url` | string | 是 | 目标机可达的服务器地址（`http(s)://`，写入脚本与 `local_config.json`） |
+| `embed_config` | string | 否 | `1`/`0`（默认 `1`）：脚本是否写入 `local_config.json`（Token 取 `client_token` 表当前值） |
+| `version` | string | 否 | 版本号；缺省时从文件名提取 |
+| `notes` | string | 否 | 备注，≤ 500 字符 |
+
+成功响应 `201`：`{"item": <同 4.20 的 item>}`
+
+错误响应：`400` 缺少文件 / 非 .zip / 地址或目录非法 / 版本号非法；`413` 安装包超过 500MB。
+
+### 4.22 `PATCH /api/installs/:id`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：部分更新安装配置。写审计日志 `install.update`（仅记录变更字段名）。
+
+请求体（均可选，至少一项）：
+
+```json
+{ "install_dir": "D:\\HT", "client_base_url": "http://hw.school.lan:81", "embed_config": false, "enabled": false, "version": "1.1.0", "notes": "..." }
+```
+
+成功响应 `200`：`{"item": <更新后的 item>}`。`enabled=false` 后脚本与安装包下载接口立即 404。
+
+错误响应：`400` 无有效字段 / 字段非法；`404` 安装包不存在。
+
+### 4.23 `DELETE /api/installs/:id`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：删除安装包记录与物理文件，对应安装命令随即失效。写审计日志 `install.delete`。
+
+成功响应 `200`：`{"ok": true}`
+
+错误响应：`404` 安装包不存在。
+
+### 4.24 `POST /api/installs/:id/shortlink`
+
+- 鉴权：`requireAuth`（JWT）
+- 描述：调用自托管 [Sink](https://github.com/zuishuai-ziyi/Sink) 短链服务的 `POST /api/link/upsert`（Bearer 鉴权），把该安装包的脚本地址注册为短链。**API Key 仅本次请求透传，不落库、不写审计**。重复调用同 `slug` 幂等（Sink 返回 `status:"existing"` 直接复用）。
+
+请求体：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `sink_url` | string | 是 | Sink 服务地址，如 `https://s.example.com`（hostname 即短链域名，需已在 Sink 注册或为默认域名） |
+| `sink_api_key` | string | 是 | `Authorization: Bearer` 令牌（`NUXT_SITE_TOKEN` 或 `sk_` 开头 API Key） |
+| `slug` | string | 否 | 自定义短链 slug（`^[A-Za-z0-9][A-Za-z0-9-]{0,63}$`；缺省由 Sink 自动生成） |
+
+成功响应 `200`：
+
+```json
+{
+  "short_url": "https://s.example.com/htinstall",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm 'https://s.example.com/htinstall' | iex\"",
+  "status": "created"
+}
+```
+
+错误响应：`400` 参数缺失/非法或安装入口已停用；`502` 短链服务连接失败 / 鉴权失败（401/403 归一）/ 存储未就绪（423）/ 域名未注册或 slug 冲突（400 透传）。
+
 ---
 
-## 五、常见错误场景对照
+## 五、一键安装公开接口（无登录态）
+
+> 这两个接口供目标机 PowerShell 直接访问，**不使用 JWT / X-Client-Token**；URL 中的 16 位随机 slug（约 95 bit 熵）即访问凭据。管理端「一键安装」页生成的安装命令形如：
+>
+> ```
+> powershell -NoProfile -ExecutionPolicy Bypass -Command "irm '<client_base_url>/api/install/s/<slug>' | iex"
+> ```
+>
+> 经 Sink 短链缩短后 `irm '<短链>' | iex`（短链 302 到脚本地址）。**slug 请勿泄露到不可信渠道**；可在管理端停用（`enabled=0`）使两个接口立即 404。
+
+### 5.1 `GET /api/install/s/:slug`
+
+- 鉴权：无（slug 即凭据）
+- 描述：返回 PowerShell 一键安装脚本文本。`embed_config=1` 时脚本按 `client_token` 表**当前值**内嵌 Token（写入目标机 `local_config.json`，首启免引导；Token 重置后新执行的安装自动跟随）。脚本行为：结束旧进程 → 下载安装包 → 解压到安装目录 → 写连接配置 → 启动客户端（开机自启由客户端按 `local_config.autostart` 自行注册）。
+- 响应：`200`，`Content-Type: text/plain; charset=utf-8`，`Cache-Control: no-store`；`404`（纯文本）不存在或已停用。
+
+### 5.2 `GET /api/install/s/:slug/package`
+
+- 鉴权：无（slug 即凭据）
+- 描述：安装包 zip 二进制流（响应头含 `X-Install-Sha256` / `X-Install-Size`）；每次成功请求 `download_count` + 1。`404`（纯文本）不存在、已停用或文件缺失。
+
+---
+
+## 六、常见错误场景对照
 
 | 场景 | HTTP | error 文本 |
 |---|---|---|
@@ -711,6 +837,9 @@ TIMESTAMPDIFF(SECOND, last_heartbeat, NOW()) <= 30 AS online
 | 上传非 .wav 文件 | 400 | `仅允许上传 .wav 文件` |
 | 上传非 .zip 更新包 | 400 | `仅允许上传 .zip 更新包` |
 | 更新包超过 500MB | 400 | `更新包超过 500MB 上传上限` |
+| 安装包字段非法（目录/地址/slug） | 400 | `安装目录非法…` / `客户端服务器地址非法…` / `自定义短链 slug 非法…` |
+| Sink 鉴权失败 | 502 | `短链服务鉴权失败（API Key 不正确）` |
+| Sink 存储未就绪 | 502 | `短链服务存储未就绪（请先在 Sink 后台打开一次 Links 页面）` |
 | 更新包版本号非法 | 400 | `版本号非法（字母数字开头，可含 . + -，长度 1-32）…` |
 | 修改生效时间但未发布过更新包 | 404 | `尚未发布过更新包` |
 | 删除内置音频 | 400 | `内置音频不可删除` |

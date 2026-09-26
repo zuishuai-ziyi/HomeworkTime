@@ -69,13 +69,14 @@ HomeworkTime/
    │  ├─ db.js                     # mysql2 连接池
    │  ├─ config.schema.json        # 业务配置契约（与 client 严格一致）
    │  ├─ default_config.json       # 默认业务配置（与 client 一致）
-   │  ├─ smoke_test.js             # validate.js 纯函数冒烟测试
+   │  ├─ smoke_test.js             # 纯函数冒烟测试（validate.js + install_script.js）
    │  ├─ routes/                   # auth / config / audio / users /
-   │  │                            # token / devices / audit / client / updates
-   │  └─ utils/                    # seed（幂等初始化）、validate、audit
+   │  │                            # token / devices / audit / client / updates / installs
+   │  └─ utils/                    # seed（幂等初始化）、validate、install_script、audit
    ├─ sql/schema.sql               # 建库建表 + 初始数据（演示用）
    ├─ uploads/audio/               # 后台上传音频落点（运行时创建）
    ├─ uploads/updates/             # 后台上传更新包落点（运行时创建）
+   ├─ uploads/installs/            # 一键安装包落点（运行时创建）
    └─ web/                         # Vue3 后台（独立 npm 工程）
       ├─ package.json
       ├─ vite.config.js            # /api、/uploads 代理到 127.0.0.1:3000
@@ -86,7 +87,7 @@ HomeworkTime/
          ├─ styles/theme.css             # 蓝色调主题（9 色 + EP 主色覆盖）
          ├─ layout/MainLayout.vue
          └─ views/  Login / ConfigEdit / AudioManage / UpdateManage /
-                    UserManage / DeviceMonitor / TokenManage / AuditLogs
+                    InstallManage / UserManage / DeviceMonitor / TokenManage / AuditLogs
 ```
 
 ---
@@ -174,7 +175,7 @@ python -m unittest discover -s client/tests -p "test_*.py" -v
 
 ```bash
 cd server
-node src/smoke_test.js          # 不依赖数据库，校验 validate.js 全部路径
+node src/smoke_test.js          # 不依赖数据库，校验 validate.js + install_script.js 全部路径
 ```
 
 ### 4.7 客户端打包
@@ -234,6 +235,7 @@ python build.py                 # 等价于双击 build.bat
 | 客户端运行产物 | `client/cache/`（含 `business_config.json`、`pending_updates.json`、`sounds/`） | 业务配置版本号缓存；含运行期数据 |
 | 客户端日志 | `client/logs/app_*.log` | 可能包含 URL / Token 片段、心跳异常堆栈 |
 | 音频上传 | `server/uploads/audio/*`（非 `.gitkeep`） | 用户上传内容 |
+| 一键安装包 | `server/uploads/installs/*`（非 `.gitkeep`） | 客户端安装包二进制，与源码不同步；下载地址含 slug 凭据亦不得外传 |
 | 构建产物 | `server/web/dist/`、`client/dist/`、`client/build/`、`client/HomeworkTime.spec`、`*/node_modules/` | 大体积 + 与源码不同步（`client/build/` 与 `client/HomeworkTime.spec` 为 PyInstaller 中间产物，build.py 每次构建重新生成） |
 
 默认凭据（`admin / admin123`、`CHANGE_ME_DEFAULT_TOKEN`）**仅供演示**，任何非本地初始测试场景都必须先修改。

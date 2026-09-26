@@ -5,7 +5,8 @@
  *   - 可选加载 dotenv（未安装则直接使用 process.env）
  *   - 启动校验 JWT_SECRET（生产未配置则拒绝启动，开发仅告警）
  *   - JSON body 限制 50MB、CORS 默认全开（CORS_ORIGIN 可收紧）
- *   - 挂载 /api 后台路由（JWT）与 /api/client 客户端路由（X-Client-Token）
+ *   - 挂载 /api 后台路由（JWT）、/api/client 客户端路由（X-Client-Token）
+ *     与 /api/install 一键安装公开路由（随机 slug 即凭据）
  *   - 可选直挂静态目录 /uploads/audio（SERVE_UPLOADS_STATIC=1 才启用，调试用；
  *     生产客户端走带鉴权的下载接口）
  *   - 全局 404 与错误处理（统一 { error: msg }）
@@ -38,6 +39,7 @@ const tokenRoutes = require('./routes/token');
 const devicesRoutes = require('./routes/devices');
 const auditRoutes = require('./routes/audit');
 const updatesRoutes = require('./routes/updates');
+const installsRoutes = require('./routes/installs');
 const clientRoutes = require('./routes/client');
 
 const DEFAULT_JWT_SECRET = 'homework-time-default-secret-change-me';
@@ -87,6 +89,10 @@ app.use('/api/client-token', requireAuth, tokenRoutes);
 app.use('/api/devices', requireAuth, devicesRoutes);
 app.use('/api/audit-logs', requireAuth, auditRoutes);
 app.use('/api/updates', requireAuth, updatesRoutes);
+app.use('/api/installs', requireAuth, installsRoutes.adminRouter);
+
+// ---- 一键安装公开接口（无登录态：随机 slug 即访问凭据，目标机 PowerShell 直接拉取）----
+app.use('/api/install', installsRoutes.publicRouter);
 
 // ---- 客户端接口（路由内部已用 requireClientToken 统一鉴权）----
 app.use('/api/client', clientRoutes);

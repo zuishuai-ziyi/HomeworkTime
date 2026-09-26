@@ -75,3 +75,32 @@ export const uploadUpdate = (file, version, notes, effectiveTime) => {
 /** PUT /api/updates/current/effective-time { effective_time } -> { ok, effective_time } */
 export const updateEffectiveTime = (effectiveTime) =>
   http.put('/updates/current/effective-time', { effective_time: effectiveTime })
+
+// ===================== 一键安装 =====================
+/** GET /api/installs -> { total, items }（items 含派生 script_url / command） */
+export const getInstalls = () => http.get('/installs')
+/**
+ * POST /api/installs（multipart：file + version/notes/install_dir/client_base_url/embed_config）
+ * 上传客户端 zip 并创建一键安装入口（生成随机 slug）。安装包较大，单独放宽超时（最长 10 分钟）。
+ */
+export const createInstall = (file, fields) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  Object.entries(fields || {}).forEach(([key, value]) => {
+    if (value !== '' && value !== null && value !== undefined) fd.append(key, value)
+  })
+  return http.post('/installs', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000
+  })
+}
+/** PATCH /api/installs/:id body { version?, notes?, install_dir?, client_base_url?, embed_config?, enabled? } */
+export const updateInstall = (id, data) => http.patch(`/installs/${id}`, data)
+/** DELETE /api/installs/:id -> { ok } */
+export const deleteInstall = (id) => http.delete(`/installs/${id}`)
+/**
+ * POST /api/installs/:id/shortlink { sink_url, sink_api_key, slug? }
+ * 调 Sink /api/link/upsert 生成短链 -> { short_url, command, status }
+ */
+export const createInstallShortlink = (id, data) =>
+  http.post(`/installs/${id}/shortlink`, data, { timeout: 30000 })

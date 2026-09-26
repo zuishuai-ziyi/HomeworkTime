@@ -31,6 +31,12 @@ const routes = [
         meta: { title: '更新管理' }
       },
       {
+        path: 'installs',
+        name: 'InstallManage',
+        component: () => import('../views/InstallManage.vue'),
+        meta: { title: '一键安装' }
+      },
+      {
         path: 'users',
         name: 'UserManage',
         component: () => import('../views/UserManage.vue'),

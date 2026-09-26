@@ -22,6 +22,10 @@ client/local_config.preset.json
 # 上传与缓存
 server/uploads/audio/*
 !server/uploads/audio/.gitkeep
+server/uploads/updates/*
+!server/uploads/updates/.gitkeep
+server/uploads/installs/*
+!server/uploads/installs/.gitkeep
 client/cache/
 client/logs/
 
