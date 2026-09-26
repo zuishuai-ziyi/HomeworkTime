@@ -234,7 +234,7 @@ python build.py                 # 等价于双击 build.bat
 | 客户端运行产物 | `client/cache/`（含 `business_config.json`、`pending_updates.json`、`sounds/`） | 业务配置版本号缓存；含运行期数据 |
 | 客户端日志 | `client/logs/app_*.log` | 可能包含 URL / Token 片段、心跳异常堆栈 |
 | 音频上传 | `server/uploads/audio/*`（非 `.gitkeep`） | 用户上传内容 |
-| 构建产物 | `server/web/dist/`、`client/dist/`、`*/node_modules/` | 大体积 + 与源码不同步 |
+| 构建产物 | `server/web/dist/`、`client/dist/`、`client/build/`、`client/HomeworkTime.spec`、`*/node_modules/` | 大体积 + 与源码不同步（`client/build/` 与 `client/HomeworkTime.spec` 为 PyInstaller 中间产物，build.py 每次构建重新生成） |
 
 默认凭据（`admin / admin123`、`CHANGE_ME_DEFAULT_TOKEN`）**仅供演示**，任何非本地初始测试场景都必须先修改。
 
